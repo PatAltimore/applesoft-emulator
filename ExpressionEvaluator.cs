@@ -1,6 +1,5 @@
 namespace ApplesoftEmulator;
 
-// Represents a value in the Applesoft BASIC runtime (number or string).
 // Represents a value in the Applesoft BASIC runtime, which can be either a number or a string.
 public class BasicValue
 {
