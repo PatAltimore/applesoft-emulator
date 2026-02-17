@@ -1,8 +1,6 @@
 namespace ApplesoftEmulator;
 
-/// <summary>
-/// Represents a value in the Applesoft BASIC runtime - either a number or a string.
-/// </summary>
+// Represents a value in the Applesoft BASIC runtime (number or string).
 /// <summary>
 /// Represents a value in the Applesoft BASIC runtime, which can be either a number or a string.
 /// </summary>

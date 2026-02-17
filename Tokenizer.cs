@@ -1,8 +1,6 @@
 namespace ApplesoftEmulator;
 
-/// <summary>
-    /// Represents the types of tokens recognized by the Applesoft BASIC tokenizer.
-    /// </summary>
+// Types of tokens recognized by the Applesoft BASIC tokenizer.
     public enum TokenType
 {
     // Literals

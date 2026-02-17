@@ -11,9 +11,7 @@ public class StopException : Exception
     public StopException(int lineNumber) : base($"BREAK IN {lineNumber}") { LineNumber = lineNumber; }
 }
 
-/// <summary>
-/// FOR/NEXT loop state
-/// </summary>
+// FOR/NEXT loop state
 public class ForState
 {
     public string Variable { get; set; } = "";
