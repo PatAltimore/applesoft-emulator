@@ -1,4 +1,4 @@
-﻿using ApplesoftEmulator;
+using ApplesoftEmulator;
 
 Console.Title = "Applesoft BASIC Emulator";
 
@@ -13,18 +13,12 @@ Console.WriteLine("  Type QUIT or EXIT to leave.");
 Console.WriteLine();
 Console.WriteLine("]");
 
-/// <summary>
-/// Entry point for the Applesoft BASIC Emulator application.
-/// </summary>
+// Entry point for the Applesoft BASIC Emulator application.
 var interpreter = new Interpreter();
-/// <summary>
-/// The tokenizer instance used for parsing user input.
-/// </summary>
+// The tokenizer instance used for parsing user input.
 var tokenizer = new Tokenizer();
 
-/// <summary>
-/// Main REPL loop for the Applesoft BASIC Emulator.
-/// </summary>
+// Main REPL loop for the Applesoft BASIC Emulator.
 while (true)
 {
     Console.Write("]");

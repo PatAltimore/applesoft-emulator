@@ -28,12 +28,7 @@ public int LineNumber { get; }
 public StopException(int lineNumber) : base($"BREAK IN {lineNumber}") { LineNumber = lineNumber; }
 }
 
-/// <summary>
-/// FOR/NEXT loop state
-/// </summary>
-/// <summary>
-/// Represents the state of a FOR/NEXT loop in Applesoft BASIC.
-/// </summary>
+// FOR/NEXT loop state
 public class ForState
 {
     /// <summary>
@@ -62,12 +57,7 @@ public int TokenPosition { get; set; }
 public int ProgramIndex { get; set; }
 }
 
-/// <summary>
-/// User-defined function (DEF FN)
-/// </summary>
-/// <summary>
-/// Represents a user-defined function (DEF FN) in Applesoft BASIC.
-/// </summary>
+// User-defined function (DEF FN)
 public class UserFunction
 {
     /// <summary>
@@ -80,12 +70,7 @@ public string ParamName { get; set; } = "";
 public List<Token> BodyTokens { get; set; } = new();
 }
 
-/// <summary>
-/// The main Applesoft BASIC interpreter.
-/// </summary>
-/// <summary>
-/// The main Applesoft BASIC interpreter. Handles program storage, execution, and variable management.
-/// </summary>
+// The main Applesoft BASIC interpreter.
 public class Interpreter
 {
     /// <summary>
