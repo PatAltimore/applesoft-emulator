@@ -241,7 +241,7 @@ public class Interpreter
 
     public double GetRandom(double arg)
     {
-        if (arg < 0) _random = new Random((int)(arg * int.MaxValue));
+        if (arg < 0) _random = new Random(unchecked((int)(arg * int.MaxValue)));
         return _random.NextDouble();
     }
 
