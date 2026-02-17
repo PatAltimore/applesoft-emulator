@@ -22,7 +22,6 @@ HELLO, WORLD!
 ### Build & Run
 
 ```bash
-cd ApplesoftEmulator
 dotnet build
 dotnet run
 ```
