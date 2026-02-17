@@ -841,7 +841,7 @@ public class Interpreter
         _evaluator.Init(_currentTokens, _tokenPos);
         int col = (int)_evaluator.Evaluate().NumberValue;
         _tokenPos = _evaluator.Position;
-        try { Console.CursorLeft = Math.Max(0, col - 1); } catch { }
+        try { Console.CursorLeft = Math.Clamp(col - 1, 0, Console.BufferWidth - 1); } catch { }
     }
 
     private void ExecuteVtab()
@@ -850,7 +850,7 @@ public class Interpreter
         _evaluator.Init(_currentTokens, _tokenPos);
         int row = (int)_evaluator.Evaluate().NumberValue;
         _tokenPos = _evaluator.Position;
-        try { Console.CursorTop = Math.Max(0, row - 1); } catch { }
+        try { Console.CursorTop = Math.Clamp(row - 1, 0, Console.BufferHeight - 1); } catch { }
     }
 
     private void ExecutePoke()
