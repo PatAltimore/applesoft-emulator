@@ -36,25 +36,17 @@ namespace ApplesoftEmulator;
 
 public class Token
 {
-    /// <summary>
-        /// The type of this token.
-        /// </summary>
+        // The type of this token.
         public TokenType Type { get; }
-    /// <summary>
-        /// The text content of this token.
-        /// </summary>
+        // The text content of this token.
         public string Text { get; }
-    /// <summary>
-        /// The numeric value of this token, if applicable.
-        /// </summary>
+        // The numeric value of this token, if applicable.
         public double NumericValue { get; }
 
-    /// <summary>
-        /// Initializes a new instance of the <see cref="Token"/> class.
-        /// </summary>
-        /// <param name="type">The type of the token.</param>
-        /// <param name="text">The text content of the token.</param>
-        /// <param name="numericValue">The numeric value of the token, if applicable.</param>
+        // Initializes a new instance of the Token class.
+        // type: The type of the token.
+        // text: The text content of the token.
+        // numericValue: The numeric value of the token, if applicable.
         public Token(TokenType type, string text, double numericValue = 0)
     {
         Type = type;
@@ -62,21 +54,15 @@ public class Token
         NumericValue = numericValue;
     }
 
-    /// <summary>
-        /// Returns a string representation of the token.
-        /// </summary>
-        /// <returns>A string describing the token type and text.</returns>
+        // Returns a string representation of the token.
+        // Returns: A string describing the token type and text.
         public override string ToString() => $"{Type}({Text})";
 }
 
-/// <summary>
-    /// Tokenizes Applesoft BASIC source code into a sequence of tokens for parsing and evaluation.
-    /// </summary>
+    // Tokenizes Applesoft BASIC source code into a sequence of tokens for parsing and evaluation.
     public class Tokenizer
 {
-    /// <summary>
-        /// Dictionary of Applesoft BASIC keywords mapped to their token types.
-        /// </summary>
+        // Dictionary of Applesoft BASIC keywords mapped to their token types.
         private static readonly Dictionary<string, TokenType> Keywords = new(StringComparer.OrdinalIgnoreCase)
     {
         ["PRINT"] = TokenType.PRINT, ["?"] = TokenType.PRINT,
@@ -107,20 +93,14 @@ public class Token
         ["POS"] = TokenType.POS,
     };
 
-    /// <summary>
-        /// The input string being tokenized.
-        /// </summary>
+        // The input string being tokenized.
         private string _input = "";
-    /// <summary>
-        /// The current position in the input string.
-        /// </summary>
+        // The current position in the input string.
         private int _pos;
 
-    /// <summary>
-        /// Tokenizes the given input string into a list of tokens.
-        /// </summary>
-        /// <param name="input">The Applesoft BASIC source code to tokenize.</param>
-        /// <returns>A list of tokens representing the input.</returns>
+        // Tokenizes the given input string into a list of tokens.
+        // input: The Applesoft BASIC source code to tokenize.
+        // Returns: A list of tokens representing the input.
         public List<Token> Tokenize(string input)
     {
         _input = input;
@@ -161,19 +141,15 @@ public class Token
         return tokens;
     }
 
-    /// <summary>
-        /// Skips whitespace characters in the input string.
-        /// </summary>
+        // Skips whitespace characters in the input string.
         private void SkipSpaces()
     {
         while (_pos < _input.Length && _input[_pos] == ' ')
             _pos++;
     }
 
-    /// <summary>
-        /// Reads a numeric token from the input string.
-        /// </summary>
-        /// <returns>A <see cref="Token"/> representing the number.</returns>
+        // Reads a numeric token from the input string.
+        // Returns: A <see cref="Token"/> representing the number.
         private Token ReadNumber()
     {
         int start = _pos;
@@ -195,10 +171,8 @@ public class Token
         return new Token(TokenType.Number, text, value);
     }
 
-    /// <summary>
-        /// Reads a string literal token from the input string.
-        /// </summary>
-        /// <returns>A <see cref="Token"/> representing the string literal.</returns>
+        // Reads a string literal token from the input string.
+        // Returns: A <see cref="Token"/> representing the string literal.
         private Token ReadString()
     {
         _pos++; // skip opening quote
@@ -210,10 +184,8 @@ public class Token
         return new Token(TokenType.StringLiteral, text);
     }
 
-    /// <summary>
-        /// Reads an identifier or keyword token from the input string.
-        /// </summary>
-        /// <returns>A <see cref="Token"/> representing the identifier or keyword.</returns>
+        // Reads an identifier or keyword token from the input string.
+        // Returns: A <see cref="Token"/> representing the identifier or keyword.
         private Token ReadIdentifierOrKeyword()
     {
         int start = _pos;
@@ -240,10 +212,8 @@ public class Token
         return new Token(TokenType.Identifier, text);
     }
 
-    /// <summary>
-        /// Reads an operator token from the input string.
-        /// </summary>
-        /// <returns>A <see cref="Token"/> representing the operator.</returns>
+        // Reads an operator token from the input string.
+        // Returns: A <see cref="Token"/> representing the operator.
         private Token ReadOperator()
     {
         char c = _input[_pos++];
@@ -269,11 +239,9 @@ public class Token
         };
     }
 
-    /// <summary>
-        /// Checks if the next character matches the expected character and advances the position if so.
-        /// </summary>
-        /// <param name="expected">The expected character to match.</param>
-        /// <returns>True if the character matched and position was advanced; otherwise, false.</returns>
+        // Checks if the next character matches the expected character and advances the position if so.
+        // expected: The expected character to match.
+        // Returns: True if the character matched and position was advanced; otherwise, false.
         private bool PeekAndAdvance(char expected)
     {
         if (_pos < _input.Length && _input[_pos] == expected)

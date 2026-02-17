@@ -22,18 +22,14 @@ public class ForState
     public int ProgramIndex { get; set; }
 }
 
-/// <summary>
-/// User-defined function (DEF FN)
-/// </summary>
+// User-defined function (DEF FN)
 public class UserFunction
 {
     public string ParamName { get; set; } = "";
     public List<Token> BodyTokens { get; set; } = new();
 }
 
-/// <summary>
-/// The main Applesoft BASIC interpreter.
-/// </summary>
+// The main Applesoft BASIC interpreter.
 public class Interpreter
 {
     private readonly SortedDictionary<int, string> _program = new();
