@@ -140,7 +140,7 @@ Separate statements with a colon:
 
 - **Numeric:** `X`, `A1`, `SCORE` — default value is `0`
 - **String:** `N$`, `NAME$` — default value is `""`
-- **Arrays:** `DIM A(10)` creates indices 0–10; auto-dimensions to 0–10 if used without DIM
+- **Arrays:** `DIM A(10)` creates indices 0-10; auto-dimensions to 0-10 if used without DIM
 
 ## Example Programs
 
@@ -161,7 +161,7 @@ Separate statements with a colon:
 ```
 10 N = INT(RND(1) * 100) + 1
 20 PRINT "I'M THINKING OF A NUMBER (1-100)"
-30 INPUT "YOUR GUESS? ";G
+30 INPUT "YOUR GUESS";G
 40 IF G < N THEN PRINT "TOO LOW!" : GOTO 30
 50 IF G > N THEN PRINT "TOO HIGH!" : GOTO 30
 60 PRINT "YOU GOT IT!"
