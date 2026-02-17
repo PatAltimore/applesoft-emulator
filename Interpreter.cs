@@ -1,161 +1,95 @@
 namespace ApplesoftEmulator;
 
-/// <summary>
-/// Represents errors that occur during Applesoft BASIC interpretation.
-/// </summary>
+// Represents errors that occur during Applesoft BASIC interpretation.
 public class BasicException : Exception
 {
-    /// <summary>
-/// Initializes a new instance of the <see cref="BasicException"/> class with a specified error message.
-/// </summary>
-/// <param name="message">The message that describes the error.</param>
+// Initializes a new instance of the BasicException class with a specified error message.
+// message: The message that describes the error.
 public BasicException(string message) : base(message) { }
 }
 
-/// <summary>
-/// Represents a STOP or BREAK event in Applesoft BASIC execution.
-/// </summary>
+// Represents a STOP or BREAK event in Applesoft BASIC execution.
 public class StopException : Exception
 {
-    /// <summary>
-/// Gets the line number where the STOP or BREAK occurred.
-/// </summary>
+// Gets the line number where the STOP or BREAK occurred.
 public int LineNumber { get; }
-    /// <summary>
-/// Initializes a new instance of the <see cref="StopException"/> class for a specific line number.
-/// </summary>
-/// <param name="lineNumber">The line number where execution stopped.</param>
+// Initializes a new instance of the StopException class for a specific line number.
+// lineNumber: The line number where execution stopped.
 public StopException(int lineNumber) : base($"BREAK IN {lineNumber}") { LineNumber = lineNumber; }
 }
 
 // FOR/NEXT loop state
 public class ForState
 {
-    /// <summary>
-/// Gets or sets the name of the loop variable.
-/// </summary>
+// Gets or sets the name of the loop variable.
 public string Variable { get; set; } = "";
-    /// <summary>
-/// Gets or sets the limit value for the loop.
-/// </summary>
+// Gets or sets the limit value for the loop.
 public double Limit { get; set; }
-    /// <summary>
-/// Gets or sets the step value for the loop.
-/// </summary>
+// Gets or sets the step value for the loop.
 public double StepValue { get; set; }
-    /// <summary>
-/// Gets or sets the line number where the FOR statement appears.
-/// </summary>
+// Gets or sets the line number where the FOR statement appears.
 public int LineNumber { get; set; }
-    /// <summary>
-/// Gets or sets the token position in the line for the FOR statement.
-/// </summary>
+// Gets or sets the token position in the line for the FOR statement.
 public int TokenPosition { get; set; }
-    /// <summary>
-/// Gets or sets the program index for the FOR statement.
-/// </summary>
+// Gets or sets the program index for the FOR statement.
 public int ProgramIndex { get; set; }
 }
 
 // User-defined function (DEF FN)
 public class UserFunction
 {
-    /// <summary>
-/// Gets or sets the parameter name for the user-defined function.
-/// </summary>
+// Gets or sets the parameter name for the user-defined function.
 public string ParamName { get; set; } = "";
-    /// <summary>
-/// Gets or sets the list of tokens representing the function body.
-/// </summary>
+// Gets or sets the list of tokens representing the function body.
 public List<Token> BodyTokens { get; set; } = new();
 }
 
 // The main Applesoft BASIC interpreter.
 public class Interpreter
 {
-    /// <summary>
-/// Stores the program lines, keyed by line number.
-/// </summary>
+// Stores the program lines, keyed by line number.
 private readonly SortedDictionary<int, string> _program = new();
-    /// <summary>
-/// Stores scalar variables by name.
-/// </summary>
+// Stores scalar variables by name.
 private readonly Dictionary<string, BasicValue> _variables = new();
-    /// <summary>
-/// Stores array variables by name.
-/// </summary>
+// Stores array variables by name.
 private readonly Dictionary<string, BasicValue[]> _arrays = new();
-    /// <summary>
-/// Stores array dimensions by array name.
-/// </summary>
+// Stores array dimensions by array name.
 private readonly Dictionary<string, int[]> _arrayDimensions = new();
-    /// <summary>
-/// Stack for managing nested FOR/NEXT loops.
-/// </summary>
+// Stack for managing nested FOR/NEXT loops.
 private readonly Stack<ForState> _forStack = new();
-    /// <summary>
-/// Stack for managing GOSUB/RETURN calls.
-/// </summary>
+// Stack for managing GOSUB/RETURN calls.
 private readonly Stack<(int lineNumber, int tokenPos, int progIdx)> _gosubStack = new();
-    /// <summary>
-/// Stores user-defined functions (DEF FN) by name.
-/// </summary>
+// Stores user-defined functions (DEF FN) by name.
 private readonly Dictionary<string, UserFunction> _userFunctions = new();
-    /// <summary>
-/// Stores DATA values collected from the program.
-/// </summary>
+// Stores DATA values collected from the program.
 private readonly List<string> _dataValues = new();
-    /// <summary>
-/// Points to the next DATA value to be READ.
-/// </summary>
+// Points to the next DATA value to be READ.
 private int _dataPointer;
-    /// <summary>
-/// Random number generator for RND function.
-/// </summary>
+// Random number generator for RND function.
 private Random _random = new();
-    /// <summary>
-/// Tokenizer for parsing program lines and statements.
-/// </summary>
+// Tokenizer for parsing program lines and statements.
 private readonly Tokenizer _tokenizer = new();
-    /// <summary>
-/// Evaluator for parsing and evaluating expressions.
-/// </summary>
+// Evaluator for parsing and evaluating expressions.
 private readonly ExpressionEvaluator _evaluator;
 
-    /// <summary>
-/// The current list of tokens being executed.
-/// </summary>
+// The current list of tokens being executed.
 private List<Token> _currentTokens = new();
-    /// <summary>
-/// The current token position in the token list.
-/// </summary>
+// The current token position in the token list.
 private int _tokenPos;
-    /// <summary>
-/// The current line number being executed.
-/// </summary>
+// The current line number being executed.
 private int _currentLineNumber;
-    /// <summary>
-/// Indicates whether the interpreter is currently running a program.
-/// </summary>
+// Indicates whether the interpreter is currently running a program.
 private bool _running;
-    /// <summary>
-/// List of line numbers in the current program.
-/// </summary>
+// List of line numbers in the current program.
 private List<int> _lineNumbers = new();
-    /// <summary>
-/// The current index in the line number list.
-/// </summary>
+// The current index in the line number list.
 private int _programIndex;
 
     // Memory simulation for PEEK/POKE
-    /// <summary>
-/// Simulated memory for PEEK and POKE operations.
-/// </summary>
+// Simulated memory for PEEK and POKE operations.
 private readonly byte[] _memory = new byte[65536];
 
-    /// <summary>
-/// Initializes a new instance of the <see cref="Interpreter"/> class.
-/// </summary>
+// Initializes a new instance of the Interpreter class.
 public Interpreter()
     {
         _evaluator = new ExpressionEvaluator(this);
@@ -163,11 +97,9 @@ public Interpreter()
 
     #region Public API
 
-    /// <summary>
-/// Stores or removes a program line.
-/// </summary>
-/// <param name="lineNumber">The line number to store or remove.</param>
-/// <param name="text">The program text. If empty, the line is removed.</param>
+// Stores or removes a program line.
+// lineNumber: The line number to store or remove.
+// text: The program text. If empty, the line is removed.
 public void StoreLine(int lineNumber, string text)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -176,10 +108,8 @@ public void StoreLine(int lineNumber, string text)
             _program[lineNumber] = text;
     }
 
-    /// <summary>
-/// Runs the stored Applesoft BASIC program.
-/// </summary>
-/// <param name="startLine">The line number to start execution from, or -1 for the first line.</param>
+// Runs the stored Applesoft BASIC program.
+// startLine: The line number to start execution from, or -1 for the first line.
 public void Run(int startLine = -1)
     {
         _variables.Clear();
@@ -237,10 +167,8 @@ public void Run(int startLine = -1)
         }
     }
 
-    /// <summary>
-/// Executes a single line of Applesoft BASIC code directly (immediate mode).
-/// </summary>
-/// <param name="line">The line of code to execute.</param>
+// Executes a single line of Applesoft BASIC code directly (immediate mode).
+// line: The line of code to execute.
 public void ExecuteDirect(string line)
     {
         _currentTokens = _tokenizer.Tokenize(line);
@@ -259,11 +187,9 @@ public void ExecuteDirect(string line)
         }
     }
 
-    /// <summary>
-/// Lists the program lines between the specified start and end line numbers.
-/// </summary>
-/// <param name="startLine">The starting line number.</param>
-/// <param name="endLine">The ending line number.</param>
+// Lists the program lines between the specified start and end line numbers.
+// startLine: The starting line number.
+// endLine: The ending line number.
 public void ListProgram(int startLine = 0, int endLine = int.MaxValue)
     {
         foreach (var kvp in _program)
@@ -273,9 +199,7 @@ public void ListProgram(int startLine = 0, int endLine = int.MaxValue)
         }
     }
 
-    /// <summary>
-/// Clears the current program and all variables.
-/// </summary>
+// Clears the current program and all variables.
 public void NewProgram()
     {
         _program.Clear();
@@ -289,10 +213,8 @@ public void NewProgram()
         _dataPointer = 0;
     }
 
-    /// <summary>
-/// Saves the current program to a file.
-/// </summary>
-/// <param name="filename">The file to save the program to.</param>
+// Saves the current program to a file.
+// filename: The file to save the program to.
 public void SaveProgram(string filename)
     {
         using var writer = new StreamWriter(filename);
@@ -301,10 +223,8 @@ public void SaveProgram(string filename)
         Console.WriteLine($"SAVED {filename}");
     }
 
-    /// <summary>
-/// Loads a program from a file, replacing the current program.
-/// </summary>
-/// <param name="filename">The file to load the program from.</param>
+// Loads a program from a file, replacing the current program.
+// filename: The file to load the program from.
 public void LoadProgram(string filename)
     {
         if (!File.Exists(filename))
@@ -321,11 +241,9 @@ public void LoadProgram(string filename)
         Console.WriteLine($"LOADED {filename}");
     }
 
-    /// <summary>
-/// Deletes program lines between the specified start and end line numbers.
-/// </summary>
-/// <param name="start">The starting line number.</param>
-/// <param name="end">The ending line number.</param>
+// Deletes program lines between the specified start and end line numbers.
+// start: The starting line number.
+// end: The ending line number.
 public void DeleteLines(int start, int end)
     {
         var toRemove = _program.Keys.Where(k => k >= start && k <= end).ToList();
@@ -333,20 +251,16 @@ public void DeleteLines(int start, int end)
             _program.Remove(key);
     }
 
-    /// <summary>
-/// Gets a value indicating whether a program is currently loaded.
-/// </summary>
+// Gets a value indicating whether a program is currently loaded.
 public bool HasProgram => _program.Count > 0;
 
     #endregion
 
     #region Variable Access (used by ExpressionEvaluator)
 
-    /// <summary>
-/// Gets the value of a scalar variable.
-/// </summary>
-/// <param name="name">The variable name.</param>
-/// <returns>The value of the variable, or a default value if not set.</returns>
+// Gets the value of a scalar variable.
+// name: The variable name.
+// Returns: The value of the variable, or a default value if not set.
 public BasicValue GetVariable(string name)
     {
         if (_variables.TryGetValue(name.ToUpper(), out var val))
@@ -355,22 +269,18 @@ public BasicValue GetVariable(string name)
         return name.EndsWith('$') ? BasicValue.FromString("") : BasicValue.FromNumber(0);
     }
 
-    /// <summary>
-/// Sets the value of a scalar variable.
-/// </summary>
-/// <param name="name">The variable name.</param>
-/// <param name="value">The value to set.</param>
+// Sets the value of a scalar variable.
+// name: The variable name.
+// value: The value to set.
 public void SetVariable(string name, BasicValue value)
     {
         _variables[name.ToUpper()] = value;
     }
 
-    /// <summary>
-/// Gets the value of an array element.
-/// </summary>
-/// <param name="name">The array name.</param>
-/// <param name="indices">The indices of the element.</param>
-/// <returns>The value of the array element.</returns>
+// Gets the value of an array element.
+// name: The array name.
+// indices: The indices of the element.
+// Returns: The value of the array element.
 public BasicValue GetArrayValue(string name, List<int> indices)
     {
         string key = name.ToUpper();
@@ -379,12 +289,10 @@ public BasicValue GetArrayValue(string name, List<int> indices)
         return _arrays[key][flatIndex];
     }
 
-    /// <summary>
-/// Sets the value of an array element.
-/// </summary>
-/// <param name="name">The array name.</param>
-/// <param name="indices">The indices of the element.</param>
-/// <param name="value">The value to set.</param>
+// Sets the value of an array element.
+// name: The array name.
+// indices: The indices of the element.
+// value: The value to set.
 public void SetArrayValue(string name, List<int> indices, BasicValue value)
     {
         string key = name.ToUpper();
@@ -393,22 +301,18 @@ public void SetArrayValue(string name, List<int> indices, BasicValue value)
         _arrays[key][flatIndex] = value;
     }
 
-    /// <summary>
-/// Returns a pseudo-random number between 0 and 1.
-/// </summary>
-/// <param name="arg">If negative, seeds the generator; otherwise, returns a random value.</param>
-/// <returns>A random double between 0 and 1.</returns>
+// Returns a pseudo-random number between 0 and 1.
+// arg: If negative, seeds the generator; otherwise, returns a random value.
+// Returns: A random double between 0 and 1.
 public double GetRandom(double arg)
     {
         if (arg < 0) _random = new Random(unchecked((int)(arg * int.MaxValue)));
         return _random.NextDouble();
     }
 
-    /// <summary>
-/// Returns the value at the specified memory address.
-/// </summary>
-/// <param name="address">The memory address to peek.</param>
-/// <returns>The byte value at the address, or 0 if out of range.</returns>
+// Returns the value at the specified memory address.
+// address: The memory address to peek.
+// Returns: The byte value at the address, or 0 if out of range.
 public int Peek(int address)
     {
         if (address >= 0 && address < 65536)
@@ -416,12 +320,10 @@ public int Peek(int address)
         return 0;
     }
 
-    /// <summary>
-/// Calls a user-defined function (DEF FN) with the specified argument.
-/// </summary>
-/// <param name="name">The function name.</param>
-/// <param name="arg">The argument to pass to the function.</param>
-/// <returns>The result of the function call.</returns>
+// Calls a user-defined function (DEF FN) with the specified argument.
+// name: The function name.
+// arg: The argument to pass to the function.
+// Returns: The result of the function call.
 public BasicValue CallUserFunction(string name, BasicValue arg)
     {
         string key = name.ToUpper();
@@ -444,9 +346,7 @@ public BasicValue CallUserFunction(string name, BasicValue arg)
 
     #region Statement Execution
 
-    /// <summary>
-/// Executes all statements in the current line.
-/// </summary>
+// Executes all statements in the current line.
 private void ExecuteStatements()
     {
         while (_running && _tokenPos < _currentTokens.Count && _currentTokens[_tokenPos].Type != TokenType.EndOfLine)
@@ -463,14 +363,10 @@ private void ExecuteStatements()
         }
     }
 
-    /// <summary>
-/// Gets the current token being processed.
-/// </summary>
+// Gets the current token being processed.
 private Token CurrentToken => _currentTokens[_tokenPos];
 
-    /// <summary>
-/// Executes a single BASIC statement at the current token position.
-/// </summary>
+// Executes a single BASIC statement at the current token position.
 private void ExecuteStatement()
     {
         var tok = CurrentToken;
@@ -515,9 +411,7 @@ private void ExecuteStatement()
         }
     }
 
-    /// <summary>
-/// Executes the PRINT statement.
-/// </summary>
+// Executes the PRINT statement.
 private void ExecutePrint()
     {
         _tokenPos++; // skip PRINT
@@ -560,9 +454,7 @@ private void ExecutePrint()
             Console.WriteLine();
     }
 
-    /// <summary>
-/// Executes the INPUT statement.
-/// </summary>
+// Executes the INPUT statement.
 private void ExecuteInput()
     {
         _tokenPos++; // skip INPUT
@@ -627,11 +519,9 @@ private void ExecuteInput()
         }
     }
 
-    /// <summary>
-/// Assigns a value to a variable as a result of INPUT.
-/// </summary>
-/// <param name="varName">The variable name.</param>
-/// <param name="value">The value to assign.</param>
+// Assigns a value to a variable as a result of INPUT.
+// varName: The variable name.
+// value: The value to assign.
 private void AssignInputValue(string varName, string value)
     {
         if (varName.EndsWith('$'))
@@ -646,9 +536,7 @@ private void AssignInputValue(string varName, string value)
         }
     }
 
-    /// <summary>
-/// Executes a LET or implicit assignment statement.
-/// </summary>
+// Executes a LET or implicit assignment statement.
 private void ExecuteLet()
     {
         string varName = CurrentToken.Text;
@@ -700,9 +588,7 @@ private void ExecuteLet()
         }
     }
 
-    /// <summary>
-/// Executes the IF...THEN statement.
-/// </summary>
+// Executes the IF...THEN statement.
 private void ExecuteIf()
     {
         _tokenPos++; // skip IF
@@ -735,9 +621,7 @@ private void ExecuteIf()
         }
     }
 
-    /// <summary>
-/// Executes the GOTO statement.
-/// </summary>
+// Executes the GOTO statement.
 private void ExecuteGoto()
     {
         _tokenPos++; // skip GOTO
@@ -747,9 +631,7 @@ private void ExecuteGoto()
         GotoLine(lineNum);
     }
 
-    /// <summary>
-/// Executes the GOSUB statement.
-/// </summary>
+// Executes the GOSUB statement.
 private void ExecuteGosub()
     {
         _tokenPos++; // skip GOSUB
@@ -761,9 +643,7 @@ private void ExecuteGosub()
         GotoLine(lineNum);
     }
 
-    /// <summary>
-/// Executes the RETURN statement.
-/// </summary>
+// Executes the RETURN statement.
 private void ExecuteReturn()
     {
         _tokenPos++;
@@ -777,9 +657,7 @@ private void ExecuteReturn()
         _tokenPos = _currentTokens.Count - 1;
     }
 
-    /// <summary>
-/// Executes the FOR statement, initializing a FOR/NEXT loop.
-/// </summary>
+// Executes the FOR statement, initializing a FOR/NEXT loop.
 private void ExecuteFor()
     {
         _tokenPos++; // skip FOR
@@ -824,9 +702,7 @@ private void ExecuteFor()
         });
     }
 
-    /// <summary>
-/// Executes the NEXT statement, advancing a FOR/NEXT loop.
-/// </summary>
+// Executes the NEXT statement, advancing a FOR/NEXT loop.
 private void ExecuteNext()
     {
         _tokenPos++; // skip NEXT
@@ -888,9 +764,7 @@ private void ExecuteNext()
         }
     }
 
-    /// <summary>
-/// Executes the DIM statement, defining array dimensions.
-/// </summary>
+// Executes the DIM statement, defining array dimensions.
 private void ExecuteDim()
     {
         _tokenPos++; // skip DIM
@@ -941,9 +815,7 @@ private void ExecuteDim()
         } while (CurrentToken.Type == TokenType.Comma && (++_tokenPos > 0));
     }
 
-    /// <summary>
-/// Executes the READ statement, reading values from DATA.
-/// </summary>
+// Executes the READ statement, reading values from DATA.
 private void ExecuteRead()
     {
         _tokenPos++; // skip READ
@@ -970,9 +842,7 @@ private void ExecuteRead()
         } while (CurrentToken.Type == TokenType.Comma && (++_tokenPos > 0));
     }
 
-    /// <summary>
-/// Executes the DEF FN statement, defining a user function.
-/// </summary>
+// Executes the DEF FN statement, defining a user function.
 private void ExecuteDef()
     {
         _tokenPos++; // skip DEF
@@ -1016,9 +886,7 @@ private void ExecuteDef()
         };
     }
 
-    /// <summary>
-/// Executes the ON...GOTO/GOSUB statement.
-/// </summary>
+// Executes the ON...GOTO/GOSUB statement.
 private void ExecuteOn()
     {
         _tokenPos++; // skip ON
@@ -1058,9 +926,7 @@ private void ExecuteOn()
         // If index out of range, just continue to next statement
     }
 
-    /// <summary>
-/// Executes the HTAB statement, setting the horizontal cursor position.
-/// </summary>
+// Executes the HTAB statement, setting the horizontal cursor position.
 private void ExecuteHtab()
     {
         _tokenPos++;
@@ -1070,9 +936,7 @@ private void ExecuteHtab()
         try { Console.CursorLeft = Math.Clamp(col - 1, 0, Console.BufferWidth - 1); } catch { }
     }
 
-    /// <summary>
-/// Executes the VTAB statement, setting the vertical cursor position.
-/// </summary>
+// Executes the VTAB statement, setting the vertical cursor position.
 private void ExecuteVtab()
     {
         _tokenPos++;
@@ -1082,9 +946,7 @@ private void ExecuteVtab()
         try { Console.CursorTop = Math.Clamp(row - 1, 0, Console.BufferHeight - 1); } catch { }
     }
 
-    /// <summary>
-/// Executes the POKE statement, writing a value to memory.
-/// </summary>
+// Executes the POKE statement, writing a value to memory.
 private void ExecutePoke()
     {
         _tokenPos++;
@@ -1104,9 +966,7 @@ private void ExecutePoke()
             _memory[addr] = (byte)(val & 0xFF);
     }
 
-    /// <summary>
-/// Executes the CALL statement (no-op in this emulator).
-/// </summary>
+// Executes the CALL statement (no-op in this emulator).
 private void ExecuteCall()
     {
         _tokenPos++;
@@ -1115,9 +975,7 @@ private void ExecuteCall()
         _tokenPos = _evaluator.Position;
     }
 
-    /// <summary>
-/// Executes the RUN statement, starting program execution optionally from a line.
-/// </summary>
+// Executes the RUN statement, starting program execution optionally from a line.
 private void ExecuteRun()
     {
         _tokenPos++;
@@ -1130,9 +988,7 @@ private void ExecuteRun()
         Run(startLine);
     }
 
-    /// <summary>
-/// Executes the LIST statement, listing program lines.
-/// </summary>
+// Executes the LIST statement, listing program lines.
 private void ExecuteList()
     {
         _tokenPos++;
@@ -1159,9 +1015,7 @@ private void ExecuteList()
         ListProgram(start, end);
     }
 
-    /// <summary>
-/// Executes the SAVE statement, saving the program to a file.
-/// </summary>
+// Executes the SAVE statement, saving the program to a file.
 private void ExecuteSave()
     {
         _tokenPos++;
@@ -1179,9 +1033,7 @@ private void ExecuteSave()
             throw new BasicException("?SYNTAX ERROR: FILENAME EXPECTED");
     }
 
-    /// <summary>
-/// Executes the LOAD statement, loading a program from a file.
-/// </summary>
+// Executes the LOAD statement, loading a program from a file.
 private void ExecuteLoadCmd()
     {
         _tokenPos++;
@@ -1199,9 +1051,7 @@ private void ExecuteLoadCmd()
             throw new BasicException("?SYNTAX ERROR: FILENAME EXPECTED");
     }
 
-    /// <summary>
-/// Executes the DEL statement, deleting program lines in a range.
-/// </summary>
+// Executes the DEL statement, deleting program lines in a range.
 private void ExecuteDel()
     {
         _tokenPos++;
@@ -1224,10 +1074,8 @@ private void ExecuteDel()
 
     #region Helpers
 
-    /// <summary>
-/// Jumps execution to the specified line number.
-/// </summary>
-/// <param name="lineNumber">The line number to jump to.</param>
+// Jumps execution to the specified line number.
+// lineNumber: The line number to jump to.
 private void GotoLine(int lineNumber)
     {
         int idx = _lineNumbers.IndexOf(lineNumber);
@@ -1252,9 +1100,7 @@ private void GotoLine(int lineNumber)
         // After executing the goto target, continue from there
     }
 
-    /// <summary>
-/// Collects all DATA values from the program into the _dataValues list.
-/// </summary>
+// Collects all DATA values from the program into the _dataValues list.
 private void CollectData()
     {
         _dataValues.Clear();
@@ -1280,11 +1126,9 @@ private void CollectData()
         }
     }
 
-    /// <summary>
-/// Splits a DATA statement's raw text into individual items.
-/// </summary>
-/// <param name="data">The raw DATA string.</param>
-/// <returns>An enumerable of DATA items.</returns>
+// Splits a DATA statement's raw text into individual items.
+// data: The raw DATA string.
+// Returns: An enumerable of DATA items.
 private IEnumerable<string> SplitDataItems(string data)
     {
         var items = new List<string>();
@@ -1307,11 +1151,9 @@ private IEnumerable<string> SplitDataItems(string data)
         return items;
     }
 
-    /// <summary>
-/// Ensures that an array exists and is properly dimensioned.
-/// </summary>
-/// <param name="name">The array name.</param>
-/// <param name="indices">The indices for the array.</param>
+// Ensures that an array exists and is properly dimensioned.
+// name: The array name.
+// indices: The indices for the array.
 private void EnsureArray(string name, List<int> indices)
     {
         if (!_arrays.ContainsKey(name))
@@ -1334,12 +1176,10 @@ private void EnsureArray(string name, List<int> indices)
         }
     }
 
-    /// <summary>
-/// Converts multidimensional indices to a flat array index.
-/// </summary>
-/// <param name="name">The array name.</param>
-/// <param name="indices">The multidimensional indices.</param>
-/// <returns>The flat array index.</returns>
+// Converts multidimensional indices to a flat array index.
+// name: The array name.
+// indices: The multidimensional indices.
+// Returns: The flat array index.
 private int GetFlatIndex(string name, List<int> indices)
     {
         var dims = _arrayDimensions[name];
@@ -1358,10 +1198,8 @@ private int GetFlatIndex(string name, List<int> indices)
         return flat;
     }
 
-    /// <summary>
-/// Parses a line of text and stores it as a program line if it starts with a number.
-/// </summary>
-/// <param name="line">The line of text to parse and store.</param>
+// Parses a line of text and stores it as a program line if it starts with a number.
+// line: The line of text to parse and store.
 public void ParseAndStore(string line)
     {
         // Check if line starts with a number
