@@ -13,9 +13,18 @@ Console.WriteLine("  Type QUIT or EXIT to leave.");
 Console.WriteLine();
 Console.WriteLine("]");
 
+/// <summary>
+/// Entry point for the Applesoft BASIC Emulator application.
+/// </summary>
 var interpreter = new Interpreter();
+/// <summary>
+/// The tokenizer instance used for parsing user input.
+/// </summary>
 var tokenizer = new Tokenizer();
 
+/// <summary>
+/// Main REPL loop for the Applesoft BASIC Emulator.
+/// </summary>
 while (true)
 {
     Console.Write("]");

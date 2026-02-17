@@ -3,12 +3,28 @@ namespace ApplesoftEmulator;
 /// <summary>
 /// Represents a value in the Applesoft BASIC runtime - either a number or a string.
 /// </summary>
+/// <summary>
+/// Represents a value in the Applesoft BASIC runtime, which can be either a number or a string.
+/// </summary>
 public class BasicValue
 {
+    /// <summary>
+    /// Gets the numeric value if this is a number; otherwise, 0.
+    /// </summary>
     public double NumberValue { get; }
+    /// <summary>
+    /// Gets the string value if this is a string; otherwise, an empty string.
+    /// </summary>
     public string StringValue { get; }
+    /// <summary>
+    /// Gets a value indicating whether this value is a string.
+    /// </summary>
     public bool IsString { get; }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BasicValue"/> class as a number.
+    /// </summary>
+    /// <param name="number">The numeric value.</param>
     private BasicValue(double number)
     {
         NumberValue = number;
@@ -16,6 +32,10 @@ public class BasicValue
         IsString = false;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BasicValue"/> class as a string.
+    /// </summary>
+    /// <param name="str">The string value.</param>
     private BasicValue(string str)
     {
         NumberValue = 0;
@@ -23,11 +43,30 @@ public class BasicValue
         IsString = true;
     }
 
+    /// <summary>
+    /// Creates a <see cref="BasicValue"/> from a number.
+    /// </summary>
+    /// <param name="n">The numeric value.</param>
+    /// <returns>A <see cref="BasicValue"/> representing the number.</returns>
     public static BasicValue FromNumber(double n) => new(n);
+    /// <summary>
+    /// Creates a <see cref="BasicValue"/> from a string.
+    /// </summary>
+    /// <param name="s">The string value.</param>
+    /// <returns>A <see cref="BasicValue"/> representing the string.</returns>
     public static BasicValue FromString(string s) => new(s);
 
+    /// <summary>
+    /// Returns the string representation of the value.
+    /// </summary>
+    /// <returns>The string value or formatted number.</returns>
     public override string ToString() => IsString ? StringValue : FormatNumber(NumberValue);
 
+    /// <summary>
+    /// Formats a number as Applesoft BASIC would print it.
+    /// </summary>
+    /// <param name="n">The number to format.</param>
+    /// <returns>The formatted string.</returns>
     public static string FormatNumber(double n)
     {
         if (n == 0) return " 0 ";
@@ -47,26 +86,55 @@ public class BasicValue
 /// Recursive-descent expression evaluator for Applesoft BASIC expressions.
 /// Precedence (low to high): OR, AND, NOT, comparison, +/-, */÷, unary -, ^, functions/atoms
 /// </summary>
+/// <summary>
+/// Recursive-descent expression evaluator for Applesoft BASIC expressions.
+/// Handles parsing and evaluation of expressions with correct precedence and function support.
+/// </summary>
 public class ExpressionEvaluator
 {
+    /// <summary>
+    /// The list of tokens to evaluate.
+    /// </summary>
     private List<Token> _tokens = new();
+    /// <summary>
+    /// The current position in the token list.
+    /// </summary>
     private int _pos;
+    /// <summary>
+    /// Reference to the interpreter for variable/function access.
+    /// </summary>
     private readonly Interpreter _interpreter;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ExpressionEvaluator"/> class.
+    /// </summary>
+    /// <param name="interpreter">The interpreter instance for context.</param>
     public ExpressionEvaluator(Interpreter interpreter)
     {
         _interpreter = interpreter;
     }
 
+    /// <summary>
+    /// Initializes the evaluator with a list of tokens and a starting position.
+    /// </summary>
+    /// <param name="tokens">The list of tokens to evaluate.</param>
+    /// <param name="startPos">The starting position in the token list.</param>
     public void Init(List<Token> tokens, int startPos)
     {
         _tokens = tokens;
         _pos = startPos;
     }
 
+    /// <summary>
+    /// Gets the current position in the token list after evaluation.
+    /// </summary>
     public int Position => _pos;
     private Token Current => _tokens[_pos];
 
+    /// <summary>
+    /// Advances to the next token and returns the current token.
+    /// </summary>
+    /// <returns>The current token before advancing.</returns>
     private Token Advance()
     {
         var t = _tokens[_pos];
@@ -74,6 +142,11 @@ public class ExpressionEvaluator
         return t;
     }
 
+    /// <summary>
+    /// If the current token matches the given type, advances and returns true.
+    /// </summary>
+    /// <param name="type">The token type to match.</param>
+    /// <returns>True if matched and advanced; otherwise, false.</returns>
     private bool Match(TokenType type)
     {
         if (Current.Type == type)
@@ -84,6 +157,10 @@ public class ExpressionEvaluator
         return false;
     }
 
+    /// <summary>
+    /// Expects the current token to match the given type, otherwise throws a syntax error.
+    /// </summary>
+    /// <param name="type">The expected token type.</param>
     private void Expect(TokenType type)
     {
         if (Current.Type != type)
@@ -91,11 +168,19 @@ public class ExpressionEvaluator
         _pos++;
     }
 
+    /// <summary>
+    /// Evaluates the expression starting at the current position.
+    /// </summary>
+    /// <returns>The result of the evaluated expression.</returns>
     public BasicValue Evaluate()
     {
         return ParseOr();
     }
 
+    /// <summary>
+    /// Parses and evaluates an OR expression.
+    /// </summary>
+    /// <returns>The result of the OR expression.</returns>
     private BasicValue ParseOr()
     {
         var left = ParseAnd();
@@ -108,6 +193,10 @@ public class ExpressionEvaluator
         return left;
     }
 
+    /// <summary>
+    /// Parses and evaluates an AND expression.
+    /// </summary>
+    /// <returns>The result of the AND expression.</returns>
     private BasicValue ParseAnd()
     {
         var left = ParseNot();
@@ -120,6 +209,10 @@ public class ExpressionEvaluator
         return left;
     }
 
+    /// <summary>
+    /// Parses and evaluates a NOT expression.
+    /// </summary>
+    /// <returns>The result of the NOT expression.</returns>
     private BasicValue ParseNot()
     {
         if (Current.Type == TokenType.NOT)
@@ -131,6 +224,10 @@ public class ExpressionEvaluator
         return ParseComparison();
     }
 
+    /// <summary>
+    /// Parses and evaluates a comparison expression.
+    /// </summary>
+    /// <returns>The result of the comparison expression.</returns>
     private BasicValue ParseComparison()
     {
         var left = ParseAddSub();
@@ -173,6 +270,10 @@ public class ExpressionEvaluator
         return left;
     }
 
+    /// <summary>
+    /// Parses and evaluates an addition or subtraction expression.
+    /// </summary>
+    /// <returns>The result of the addition or subtraction expression.</returns>
     private BasicValue ParseAddSub()
     {
         var left = ParseMulDiv();
@@ -195,6 +296,10 @@ public class ExpressionEvaluator
         return left;
     }
 
+    /// <summary>
+    /// Parses and evaluates a multiplication or division expression.
+    /// </summary>
+    /// <returns>The result of the multiplication or division expression.</returns>
     private BasicValue ParseMulDiv()
     {
         var left = ParseUnary();
@@ -216,6 +321,10 @@ public class ExpressionEvaluator
         return left;
     }
 
+    /// <summary>
+    /// Parses and evaluates a unary plus or minus expression.
+    /// </summary>
+    /// <returns>The result of the unary expression.</returns>
     private BasicValue ParseUnary()
     {
         if (Current.Type == TokenType.Minus)
@@ -232,6 +341,10 @@ public class ExpressionEvaluator
         return ParsePower();
     }
 
+    /// <summary>
+    /// Parses and evaluates an exponentiation expression.
+    /// </summary>
+    /// <returns>The result of the exponentiation expression.</returns>
     private BasicValue ParsePower()
     {
         var left = ParseAtom();
@@ -245,6 +358,10 @@ public class ExpressionEvaluator
         return left;
     }
 
+    /// <summary>
+    /// Parses and evaluates an atomic value (number, string, variable, or function call).
+    /// </summary>
+    /// <returns>The result of the atomic value.</returns>
     private BasicValue ParseAtom()
     {
         var tok = Current;
@@ -393,6 +510,11 @@ public class ExpressionEvaluator
         }
     }
 
+    /// <summary>
+    /// Calls a numeric function with one argument.
+    /// </summary>
+    /// <param name="func">The function to call.</param>
+    /// <returns>The result as a <see cref="BasicValue"/>.</returns>
     private BasicValue CallNumericFunc1(Func<double, double> func)
     {
         Advance();
@@ -402,6 +524,11 @@ public class ExpressionEvaluator
         return BasicValue.FromNumber(func(arg.NumberValue));
     }
 
+    /// <summary>
+    /// Calls a string function with a string and numeric argument.
+    /// </summary>
+    /// <param name="func">The function to call.</param>
+    /// <returns>The result as a <see cref="BasicValue"/>.</returns>
     private BasicValue CallStringFunc2(Func<string, double, string> func)
     {
         Advance();
@@ -413,6 +540,10 @@ public class ExpressionEvaluator
         return BasicValue.FromString(func(str.StringValue, num.NumberValue));
     }
 
+    /// <summary>
+    /// Calls a user-defined function (DEF FN).
+    /// </summary>
+    /// <returns>The result of the user function.</returns>
     private BasicValue CallUserFunction()
     {
         Advance(); // skip FN
@@ -424,6 +555,10 @@ public class ExpressionEvaluator
         return _interpreter.CallUserFunction(name, arg);
     }
 
+    /// <summary>
+    /// Reads the value of a variable or array element.
+    /// </summary>
+    /// <returns>The value of the variable or array element.</returns>
     private BasicValue ReadVariable()
     {
         string name = Current.Text;

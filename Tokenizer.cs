@@ -1,6 +1,9 @@
 namespace ApplesoftEmulator;
 
-public enum TokenType
+/// <summary>
+    /// Represents the types of tokens recognized by the Applesoft BASIC tokenizer.
+    /// </summary>
+    public enum TokenType
 {
     // Literals
     Number,
@@ -35,23 +38,48 @@ public enum TokenType
 
 public class Token
 {
-    public TokenType Type { get; }
-    public string Text { get; }
-    public double NumericValue { get; }
+    /// <summary>
+        /// The type of this token.
+        /// </summary>
+        public TokenType Type { get; }
+    /// <summary>
+        /// The text content of this token.
+        /// </summary>
+        public string Text { get; }
+    /// <summary>
+        /// The numeric value of this token, if applicable.
+        /// </summary>
+        public double NumericValue { get; }
 
-    public Token(TokenType type, string text, double numericValue = 0)
+    /// <summary>
+        /// Initializes a new instance of the <see cref="Token"/> class.
+        /// </summary>
+        /// <param name="type">The type of the token.</param>
+        /// <param name="text">The text content of the token.</param>
+        /// <param name="numericValue">The numeric value of the token, if applicable.</param>
+        public Token(TokenType type, string text, double numericValue = 0)
     {
         Type = type;
         Text = text;
         NumericValue = numericValue;
     }
 
-    public override string ToString() => $"{Type}({Text})";
+    /// <summary>
+        /// Returns a string representation of the token.
+        /// </summary>
+        /// <returns>A string describing the token type and text.</returns>
+        public override string ToString() => $"{Type}({Text})";
 }
 
-public class Tokenizer
+/// <summary>
+    /// Tokenizes Applesoft BASIC source code into a sequence of tokens for parsing and evaluation.
+    /// </summary>
+    public class Tokenizer
 {
-    private static readonly Dictionary<string, TokenType> Keywords = new(StringComparer.OrdinalIgnoreCase)
+    /// <summary>
+        /// Dictionary of Applesoft BASIC keywords mapped to their token types.
+        /// </summary>
+        private static readonly Dictionary<string, TokenType> Keywords = new(StringComparer.OrdinalIgnoreCase)
     {
         ["PRINT"] = TokenType.PRINT, ["?"] = TokenType.PRINT,
         ["INPUT"] = TokenType.INPUT, ["LET"] = TokenType.LET,
@@ -81,10 +109,21 @@ public class Tokenizer
         ["POS"] = TokenType.POS,
     };
 
-    private string _input = "";
-    private int _pos;
+    /// <summary>
+        /// The input string being tokenized.
+        /// </summary>
+        private string _input = "";
+    /// <summary>
+        /// The current position in the input string.
+        /// </summary>
+        private int _pos;
 
-    public List<Token> Tokenize(string input)
+    /// <summary>
+        /// Tokenizes the given input string into a list of tokens.
+        /// </summary>
+        /// <param name="input">The Applesoft BASIC source code to tokenize.</param>
+        /// <returns>A list of tokens representing the input.</returns>
+        public List<Token> Tokenize(string input)
     {
         _input = input;
         _pos = 0;
@@ -124,13 +163,20 @@ public class Tokenizer
         return tokens;
     }
 
-    private void SkipSpaces()
+    /// <summary>
+        /// Skips whitespace characters in the input string.
+        /// </summary>
+        private void SkipSpaces()
     {
         while (_pos < _input.Length && _input[_pos] == ' ')
             _pos++;
     }
 
-    private Token ReadNumber()
+    /// <summary>
+        /// Reads a numeric token from the input string.
+        /// </summary>
+        /// <returns>A <see cref="Token"/> representing the number.</returns>
+        private Token ReadNumber()
     {
         int start = _pos;
         while (_pos < _input.Length && (char.IsDigit(_input[_pos]) || _input[_pos] == '.'))
@@ -151,7 +197,11 @@ public class Tokenizer
         return new Token(TokenType.Number, text, value);
     }
 
-    private Token ReadString()
+    /// <summary>
+        /// Reads a string literal token from the input string.
+        /// </summary>
+        /// <returns>A <see cref="Token"/> representing the string literal.</returns>
+        private Token ReadString()
     {
         _pos++; // skip opening quote
         int start = _pos;
@@ -162,7 +212,11 @@ public class Tokenizer
         return new Token(TokenType.StringLiteral, text);
     }
 
-    private Token ReadIdentifierOrKeyword()
+    /// <summary>
+        /// Reads an identifier or keyword token from the input string.
+        /// </summary>
+        /// <returns>A <see cref="Token"/> representing the identifier or keyword.</returns>
+        private Token ReadIdentifierOrKeyword()
     {
         int start = _pos;
         while (_pos < _input.Length && (char.IsLetterOrDigit(_input[_pos]) || _input[_pos] == '$'))
@@ -188,7 +242,11 @@ public class Tokenizer
         return new Token(TokenType.Identifier, text);
     }
 
-    private Token ReadOperator()
+    /// <summary>
+        /// Reads an operator token from the input string.
+        /// </summary>
+        /// <returns>A <see cref="Token"/> representing the operator.</returns>
+        private Token ReadOperator()
     {
         char c = _input[_pos++];
         return c switch
@@ -213,7 +271,12 @@ public class Tokenizer
         };
     }
 
-    private bool PeekAndAdvance(char expected)
+    /// <summary>
+        /// Checks if the next character matches the expected character and advances the position if so.
+        /// </summary>
+        /// <param name="expected">The expected character to match.</param>
+        /// <returns>True if the character matched and position was advanced; otherwise, false.</returns>
+        private bool PeekAndAdvance(char expected)
     {
         if (_pos < _input.Length && _input[_pos] == expected)
         {
