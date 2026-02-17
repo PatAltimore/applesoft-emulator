@@ -185,7 +185,7 @@ public class ExpressionEvaluator
             if (op.Type == TokenType.Plus && (left.IsString || right.IsString))
             {
                 // String concatenation
-                left = BasicValue.FromString(left.ToString().Trim() + right.ToString().Trim());
+                left = BasicValue.FromString(left.ToString() + right.ToString());
             }
             else if (op.Type == TokenType.Plus)
                 left = BasicValue.FromNumber(left.NumberValue + right.NumberValue);
