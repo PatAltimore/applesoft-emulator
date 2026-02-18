@@ -57,8 +57,9 @@ Type lines with line numbers to store them. Lines are automatically sorted by nu
 | `LIST 10`         | List line 10                         |
 | `LIST 10,50`      | List lines 10 through 50             |
 | `NEW`             | Clear the program and all variables  |
-| `SAVE "file.bas"` | Save the program to a file           |
-| `LOAD "file.bas"` | Load a program from a file           |
+| `SAVE "MYPROG"` | Save the program to the Disk folder    |
+| `LOAD "MYPROG"` | Load a program from the Disk folder    |
+| `CATALOG`        | List all programs in the Disk folder   |
 | `DEL 10,50`       | Delete lines 10 through 50           |
 | `QUIT` / `EXIT`   | Exit the emulator                    |
 
@@ -193,7 +194,7 @@ The emulator is composed of three main components:
 - No sound support
 - `PEEK`/`POKE` use simulated memory (no real hardware mapping)
 - `CALL` accepts but ignores machine-language addresses
-- No cassette or disk I/O beyond `SAVE`/`LOAD` to local files
+- No cassette or disk I/O beyond `SAVE`/`LOAD`/`CATALOG` to the `Disk/` folder
 
 ## License
 
