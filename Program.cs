@@ -8,7 +8,7 @@ Console.WriteLine("                APPLESOFT BASIC EMULATOR");
 Console.WriteLine("          Based on Apple ][ Applesoft BASIC");
 Console.WriteLine();
 Console.WriteLine("  Type BASIC commands or line-numbered programs.");
-Console.WriteLine("  Commands: RUN, LIST, NEW, SAVE \"file\", LOAD \"file\"");
+Console.WriteLine("  Commands: RUN, LIST, NEW, SAVE <filename>, LOAD <filename>, CATALOG");
 Console.WriteLine("  Type QUIT or EXIT to leave.");
 Console.WriteLine();
 Console.WriteLine("]");
