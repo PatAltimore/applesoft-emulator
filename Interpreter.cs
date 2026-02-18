@@ -90,7 +90,40 @@ private int _programIndex;
 private readonly byte[] _memory = new byte[65536];
 
 // Path to the Disk folder used for SAVE, LOAD, and CATALOG.
-private static readonly string DiskPath = Path.Combine(AppContext.BaseDirectory, "Disk");
+// Resolves the Disk folder from the base directory or the current working directory.
+private static readonly string DiskPath = ResolveDiskPath();
+
+// Finds the Disk folder, checking the application base directory first, then the current directory.
+// This ensures the folder is found whether running from the build output or the project root.
+private static string ResolveDiskPath()
+{
+    // Try AppContext.BaseDirectory first (build output)
+    string baseDisk = Path.Combine(AppContext.BaseDirectory, "disk");
+    if (Directory.Exists(baseDisk)) return baseDisk;
+
+    // Try current working directory (project root, common on Linux)
+    string cwdDisk = Path.Combine(Directory.GetCurrentDirectory(), "disk");
+    if (Directory.Exists(cwdDisk)) return cwdDisk;
+
+    // Default to base directory (will be created on SAVE)
+    return baseDisk;
+}
+
+// Resolves a filename within the Disk folder using case-insensitive matching.
+// On case-sensitive filesystems (Linux), finds the actual file regardless of casing.
+// Returns the full path if found, or the original-cased path if not.
+private static string ResolveFilePath(string fileName)
+{
+    string path = Path.Combine(DiskPath, fileName);
+    // If exact match exists or directory doesn't exist, return as-is
+    if (File.Exists(path) || !Directory.Exists(DiskPath))
+        return path;
+
+    // Case-insensitive search for the file on Linux
+    var match = Directory.GetFiles(DiskPath)
+        .FirstOrDefault(f => string.Equals(Path.GetFileName(f), fileName, StringComparison.OrdinalIgnoreCase));
+    return match ?? path;
+}
 
 // Initializes a new instance of the Interpreter class.
 public Interpreter()
@@ -224,7 +257,7 @@ public void SaveProgram(string name)
         Directory.CreateDirectory(DiskPath); // create Disk folder if it doesn't exist
         if (!name.EndsWith(".bas", StringComparison.OrdinalIgnoreCase))
             name += ".bas";
-        string path = Path.Combine(DiskPath, name);
+        string path = ResolveFilePath(name);
         using var writer = new StreamWriter(path);
         foreach (var kvp in _program)
             writer.WriteLine($"{kvp.Key} {kvp.Value}"); // write each line as "linenum text"
@@ -238,7 +271,7 @@ public void LoadProgram(string name)
     {
         if (!name.EndsWith(".bas", StringComparison.OrdinalIgnoreCase))
             name += ".bas";
-        string path = Path.Combine(DiskPath, name);
+        string path = ResolveFilePath(name);
         if (!File.Exists(path))
         {
             Console.WriteLine("FILE NOT FOUND");

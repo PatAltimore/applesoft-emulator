@@ -7,4 +7,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <!-- Copy disk folder contents to build output so LOAD/CATALOG work from any platform -->
+  <ItemGroup>
+    <None Include="disk\**" CopyToOutputDirectory="PreserveNewest" LinkBase="disk" />
+  </ItemGroup>
+
 </Project>
