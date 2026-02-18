@@ -589,15 +589,13 @@ private void ExecuteInput()
             }
         }
 
-        // Collect variable names
-        var varNames = new List<string>();
-        varNames.Add(CurrentToken.Text);
-        _tokenPos++;
+        // Collect INPUT targets (variables or array elements)
+        var targets = new List<InputTarget>();
+        targets.Add(ParseInputTarget());
         while (CurrentToken.Type == TokenType.Comma)
         {
             _tokenPos++;
-            varNames.Add(CurrentToken.Text);
-            _tokenPos++;
+            targets.Add(ParseInputTarget());
         }
 
         bool done = false;
@@ -607,46 +605,96 @@ private void ExecuteInput()
             string? input = Console.ReadLine() ?? "";
             string[] parts = input.Split(',');
 
-            if (parts.Length < varNames.Count)
+            if (parts.Length < targets.Count)
             {
                 // Not enough values, ask again for remaining
-                for (int i = 0; i < Math.Min(parts.Length, varNames.Count); i++)
-                    AssignInputValue(varNames[i], parts[i].Trim());
+                for (int i = 0; i < Math.Min(parts.Length, targets.Count); i++)
+                    AssignInputValue(targets[i], parts[i].Trim());
 
-                if (parts.Length < varNames.Count)
+                if (parts.Length < targets.Count)
                 {
                     Console.Write("?? ");
                     string? more = Console.ReadLine() ?? "";
                     var remaining = more.Split(',');
-                    for (int i = 0; i < Math.Min(remaining.Length, varNames.Count - parts.Length); i++)
-                        AssignInputValue(varNames[parts.Length + i], remaining[i].Trim());
+                    for (int i = 0; i < Math.Min(remaining.Length, targets.Count - parts.Length); i++)
+                        AssignInputValue(targets[parts.Length + i], remaining[i].Trim());
                 }
                 done = true;
             }
             else
             {
-                for (int i = 0; i < varNames.Count; i++)
-                    AssignInputValue(varNames[i], parts[i].Trim());
+                for (int i = 0; i < targets.Count; i++)
+                    AssignInputValue(targets[i], parts[i].Trim());
                 done = true;
             }
         }
     }
 
-// Assigns a value to a variable as a result of INPUT.
-// varName: The variable name.
-// value: The value to assign.
-private void AssignInputValue(string varName, string value)
+// Represents an INPUT assignment target (scalar variable or array element).
+private sealed class InputTarget
+{
+    public string Name { get; set; } = "";
+    public List<int>? Indices { get; set; }
+}
+
+// Parses a single INPUT target from the current token position.
+// Supports scalar variables and array references like A(I) or B$(I,J).
+private InputTarget ParseInputTarget()
     {
+        if (CurrentToken.Type != TokenType.Identifier)
+            throw new BasicException("?SYNTAX ERROR: EXPECTED VARIABLE");
+
+        string name = CurrentToken.Text;
+        _tokenPos++;
+
+        if (CurrentToken.Type != TokenType.LeftParen)
+            return new InputTarget { Name = name };
+
+        _tokenPos++; // skip '('
+        var indices = new List<int>();
+
+        _evaluator.Init(_currentTokens, _tokenPos);
+        indices.Add((int)_evaluator.Evaluate().NumberValue);
+        _tokenPos = _evaluator.Position;
+
+        while (CurrentToken.Type == TokenType.Comma)
+        {
+            _tokenPos++;
+            _evaluator.Init(_currentTokens, _tokenPos);
+            indices.Add((int)_evaluator.Evaluate().NumberValue);
+            _tokenPos = _evaluator.Position;
+        }
+
+        if (CurrentToken.Type != TokenType.RightParen)
+            throw new BasicException("?SYNTAX ERROR: EXPECTED )");
+        _tokenPos++;
+
+        return new InputTarget { Name = name, Indices = indices };
+    }
+
+// Assigns a value to a variable as a result of INPUT.
+// target: The INPUT target (variable or array element).
+// value: The value to assign.
+private void AssignInputValue(InputTarget target, string value)
+    {
+        string varName = target.Name;
+        BasicValue parsedValue;
+
         if (varName.EndsWith('$'))
-            SetVariable(varName, BasicValue.FromString(value));
+            parsedValue = BasicValue.FromString(value);
         else
         {
             if (double.TryParse(value, System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture, out double num))
-                SetVariable(varName, BasicValue.FromNumber(num));
+                parsedValue = BasicValue.FromNumber(num);
             else
-                SetVariable(varName, BasicValue.FromNumber(0));
+                parsedValue = BasicValue.FromNumber(0);
         }
+
+        if (target.Indices is null)
+            SetVariable(varName, parsedValue);
+        else
+            SetArrayValue(varName, target.Indices, parsedValue);
     }
 
 // Executes a LET or implicit assignment statement.
