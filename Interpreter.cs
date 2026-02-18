@@ -217,6 +217,7 @@ public void NewProgram()
     }
 
 // Saves the current program to the Disk folder.
+// In DOS 3.3, SAVE is silent on success — no confirmation message is printed.
 // name: The program name (with or without .bas extension).
 public void SaveProgram(string name)
     {
@@ -227,10 +228,11 @@ public void SaveProgram(string name)
         using var writer = new StreamWriter(path);
         foreach (var kvp in _program)
             writer.WriteLine($"{kvp.Key} {kvp.Value}"); // write each line as "linenum text"
-        Console.WriteLine($"SAVED {name.ToUpper()}");
+        // DOS 3.3: silent on success, no output
     }
 
 // Loads a program from the Disk folder, replacing the current program.
+// In DOS 3.3, LOAD is silent on success. Errors use DOS-style messages (no '?' prefix).
 // name: The program name (with or without .bas extension).
 public void LoadProgram(string name)
     {
@@ -239,7 +241,7 @@ public void LoadProgram(string name)
         string path = Path.Combine(DiskPath, name);
         if (!File.Exists(path))
         {
-            Console.WriteLine("?FILE NOT FOUND");
+            Console.WriteLine("FILE NOT FOUND");
             return;
         }
         NewProgram(); // clear existing program before loading
@@ -248,7 +250,7 @@ public void LoadProgram(string name)
             if (string.IsNullOrWhiteSpace(line)) continue;
             ParseAndStore(line); // parse "linenum text" and store in program
         }
-        Console.WriteLine($"LOADED {name.ToUpper()}");
+        // DOS 3.3: silent on success, no output
     }
 
 // Lists all .bas programs available in the Disk folder, emulating the DOS 3.3 CATALOG command.
