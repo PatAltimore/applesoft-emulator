@@ -251,24 +251,44 @@ public void LoadProgram(string name)
         Console.WriteLine($"LOADED {name.ToUpper()}");
     }
 
-// Lists all .bas programs available in the Disk folder, mimicking the Apple II CATALOG command.
+// Lists all .bas programs available in the Disk folder, emulating the DOS 3.3 CATALOG command.
+// Output format matches the Apple ][ DOS 3.3 display:
+//   blank line
+//   DISK VOLUME 254
+//   blank line
+//   [lock][type] [sectors] [filename]
+// Where lock is '*' (locked) or ' ' (unlocked), type is 'A' (Applesoft),
+// sectors is a 3-digit zero-padded count based on file size (256 bytes/sector),
+// and filename is up to 30 characters (the DOS 3.3 maximum).
 public void CatalogDisk()
     {
         if (!Directory.Exists(DiskPath))
         {
-            Console.WriteLine("DISK: NO FILES");
+            Console.WriteLine();
+            Console.WriteLine("DISK VOLUME 254");
+            Console.WriteLine();
             return;
         }
-        // Collect and sort program names alphabetically
+        // Collect and sort program files alphabetically
         var files = Directory.GetFiles(DiskPath, "*.bas")
-                             .Select(f => Path.GetFileName(f).ToUpper())
-                             .OrderBy(f => f)
+                             .OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase)
                              .ToList();
         Console.WriteLine();
-        Console.WriteLine($" DISK VOLUME: APPLESOFT");
+        Console.WriteLine("DISK VOLUME 254");
         Console.WriteLine();
-        foreach (var f in files)
-            Console.WriteLine($" A 003 {Path.GetFileNameWithoutExtension(f)}"); // "A" = Applesoft, "003" = sector count
+        foreach (var filePath in files)
+        {
+            var fileInfo = new FileInfo(filePath);
+            // Calculate sector count: 1 sector for the track/sector list + data sectors
+            // Each sector is 256 bytes; minimum 2 sectors per file
+            int dataSectors = Math.Max(1, (int)Math.Ceiling(fileInfo.Length / 256.0));
+            int totalSectors = dataSectors + 1; // +1 for Track/Sector list sector
+            string name = Path.GetFileNameWithoutExtension(filePath).ToUpper();
+            // DOS 3.3 filenames are max 30 characters
+            if (name.Length > 30) name = name[..30];
+            // Format: " A NNN FILENAME" (space = unlocked, A = Applesoft BASIC)
+            Console.WriteLine($" A {totalSectors:D3} {name}");
+        }
         Console.WriteLine();
     }
 
