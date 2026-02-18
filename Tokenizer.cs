@@ -16,7 +16,7 @@ namespace ApplesoftEmulator;
     // Keywords
     PRINT, INPUT, LET, IF, THEN, GOTO, GOSUB, RETURN,
     FOR, TO, STEP, NEXT,
-    REM, END, STOP, DIM, NEW, RUN, LIST, SAVE, LOAD, DEL,
+    REM, END, STOP, DIM, NEW, RUN, LIST, SAVE, LOAD, DEL, CATALOG,
     AND, OR, NOT,
     DATA, READ, RESTORE,
     DEF, FN,
@@ -76,6 +76,7 @@ public class Token
         ["DIM"] = TokenType.DIM, ["NEW"] = TokenType.NEW,
         ["RUN"] = TokenType.RUN, ["LIST"] = TokenType.LIST,
         ["SAVE"] = TokenType.SAVE, ["LOAD"] = TokenType.LOAD, ["DEL"] = TokenType.DEL,
+        ["CATALOG"] = TokenType.CATALOG,
         ["AND"] = TokenType.AND, ["OR"] = TokenType.OR, ["NOT"] = TokenType.NOT,
         ["DATA"] = TokenType.DATA, ["READ"] = TokenType.READ, ["RESTORE"] = TokenType.RESTORE,
         ["DEF"] = TokenType.DEF, ["FN"] = TokenType.FN,

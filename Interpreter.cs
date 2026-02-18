@@ -89,6 +89,9 @@ private int _programIndex;
 // Simulated memory for PEEK and POKE operations.
 private readonly byte[] _memory = new byte[65536];
 
+// Path to the Disk folder used for SAVE, LOAD, and CATALOG.
+private static readonly string DiskPath = Path.Combine(AppContext.BaseDirectory, "Disk");
+
 // Initializes a new instance of the Interpreter class.
 public Interpreter()
     {
@@ -213,32 +216,60 @@ public void NewProgram()
         _dataPointer = 0;
     }
 
-// Saves the current program to a file.
-// filename: The file to save the program to.
-public void SaveProgram(string filename)
+// Saves the current program to the Disk folder.
+// name: The program name (with or without .bas extension).
+public void SaveProgram(string name)
     {
-        using var writer = new StreamWriter(filename);
+        Directory.CreateDirectory(DiskPath); // create Disk folder if it doesn't exist
+        if (!name.EndsWith(".bas", StringComparison.OrdinalIgnoreCase))
+            name += ".bas";
+        string path = Path.Combine(DiskPath, name);
+        using var writer = new StreamWriter(path);
         foreach (var kvp in _program)
-            writer.WriteLine($"{kvp.Key} {kvp.Value}");
-        Console.WriteLine($"SAVED {filename}");
+            writer.WriteLine($"{kvp.Key} {kvp.Value}"); // write each line as "linenum text"
+        Console.WriteLine($"SAVED {name.ToUpper()}");
     }
 
-// Loads a program from a file, replacing the current program.
-// filename: The file to load the program from.
-public void LoadProgram(string filename)
+// Loads a program from the Disk folder, replacing the current program.
+// name: The program name (with or without .bas extension).
+public void LoadProgram(string name)
     {
-        if (!File.Exists(filename))
+        if (!name.EndsWith(".bas", StringComparison.OrdinalIgnoreCase))
+            name += ".bas";
+        string path = Path.Combine(DiskPath, name);
+        if (!File.Exists(path))
         {
             Console.WriteLine("?FILE NOT FOUND");
             return;
         }
-        NewProgram();
-        foreach (string line in File.ReadAllLines(filename))
+        NewProgram(); // clear existing program before loading
+        foreach (string line in File.ReadAllLines(path))
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
-            ParseAndStore(line);
+            ParseAndStore(line); // parse "linenum text" and store in program
         }
-        Console.WriteLine($"LOADED {filename}");
+        Console.WriteLine($"LOADED {name.ToUpper()}");
+    }
+
+// Lists all .bas programs available in the Disk folder, mimicking the Apple II CATALOG command.
+public void CatalogDisk()
+    {
+        if (!Directory.Exists(DiskPath))
+        {
+            Console.WriteLine("DISK: NO FILES");
+            return;
+        }
+        // Collect and sort program names alphabetically
+        var files = Directory.GetFiles(DiskPath, "*.bas")
+                             .Select(f => Path.GetFileName(f).ToUpper())
+                             .OrderBy(f => f)
+                             .ToList();
+        Console.WriteLine();
+        Console.WriteLine($" DISK VOLUME: APPLESOFT");
+        Console.WriteLine();
+        foreach (var f in files)
+            Console.WriteLine($" A 003 {Path.GetFileNameWithoutExtension(f)}"); // "A" = Applesoft, "003" = sector count
+        Console.WriteLine();
     }
 
 // Deletes program lines between the specified start and end line numbers.
@@ -402,6 +433,7 @@ private void ExecuteStatement()
             case TokenType.SAVE: ExecuteSave(); break;
             case TokenType.LOAD: ExecuteLoadCmd(); break;
             case TokenType.DEL: ExecuteDel(); break;
+            case TokenType.CATALOG: CatalogDisk(); _tokenPos++; break;
             case TokenType.Identifier:
                 // Implicit LET
                 ExecuteLet();
@@ -1015,7 +1047,7 @@ private void ExecuteList()
         ListProgram(start, end);
     }
 
-// Executes the SAVE statement, saving the program to a file.
+// Executes the SAVE statement, saving the program to the Disk folder.
 private void ExecuteSave()
     {
         _tokenPos++;
@@ -1026,14 +1058,14 @@ private void ExecuteSave()
         }
         else if (CurrentToken.Type == TokenType.Identifier)
         {
-            SaveProgram(CurrentToken.Text + ".bas");
+            SaveProgram(CurrentToken.Text);
             _tokenPos++;
         }
         else
             throw new BasicException("?SYNTAX ERROR: FILENAME EXPECTED");
     }
 
-// Executes the LOAD statement, loading a program from a file.
+// Executes the LOAD statement, loading a program from the Disk folder.
 private void ExecuteLoadCmd()
     {
         _tokenPos++;
@@ -1044,7 +1076,7 @@ private void ExecuteLoadCmd()
         }
         else if (CurrentToken.Type == TokenType.Identifier)
         {
-            LoadProgram(CurrentToken.Text + ".bas");
+            LoadProgram(CurrentToken.Text);
             _tokenPos++;
         }
         else
