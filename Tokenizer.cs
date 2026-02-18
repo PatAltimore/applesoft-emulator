@@ -14,7 +14,7 @@ namespace ApplesoftEmulator;
     LeftParen, RightParen, Comma, Semicolon, Colon,
 
     // Keywords
-    PRINT, INPUT, LET, IF, THEN, GOTO, GOSUB, RETURN,
+    PRINT, INPUT, GET, LET, IF, THEN, GOTO, GOSUB, RETURN,
     FOR, TO, STEP, NEXT,
     REM, END, STOP, DIM, NEW, RUN, LIST, SAVE, LOAD, DEL, CATALOG,
     AND, OR, NOT,
@@ -66,7 +66,8 @@ public class Token
         private static readonly Dictionary<string, TokenType> Keywords = new(StringComparer.OrdinalIgnoreCase)
     {
         ["PRINT"] = TokenType.PRINT, ["?"] = TokenType.PRINT,
-        ["INPUT"] = TokenType.INPUT, ["LET"] = TokenType.LET,
+        ["INPUT"] = TokenType.INPUT, ["GET"] = TokenType.GET,
+        ["LET"] = TokenType.LET,
         ["IF"] = TokenType.IF, ["THEN"] = TokenType.THEN,
         ["GOTO"] = TokenType.GOTO, ["GOSUB"] = TokenType.GOSUB,
         ["RETURN"] = TokenType.RETURN,
@@ -204,7 +205,16 @@ public class Token
 
         // Check for keywords (try with $ first for STR$, CHR$, etc.)
         if (Keywords.TryGetValue(text, out var kwType))
+        {
+            // REM consumes the entire rest of the line as a comment
+            if (kwType == TokenType.REM)
+            {
+                string comment = _pos < _input.Length ? _input[_pos..] : "";
+                _pos = _input.Length;
+                return new Token(TokenType.REM, text + comment);
+            }
             return new Token(kwType, text);
+        }
 
         // Check for FN prefix
         if (text.Equals("FN", StringComparison.OrdinalIgnoreCase))

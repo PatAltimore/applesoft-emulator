@@ -93,20 +93,20 @@ private readonly byte[] _memory = new byte[65536];
 // Resolves the Disk folder from the base directory or the current working directory.
 private static readonly string DiskPath = ResolveDiskPath();
 
-// Finds the Disk folder, checking the application base directory first, then the current directory.
-// This ensures the folder is found whether running from the build output or the project root.
+// Finds the disk folder, checking the current working directory first, then the application base directory.
+// This ensures SAVE writes to the project's disk folder (visible in the source tree) when running via dotnet run.
 private static string ResolveDiskPath()
 {
-    // Try AppContext.BaseDirectory first (build output)
-    string baseDisk = Path.Combine(AppContext.BaseDirectory, "disk");
-    if (Directory.Exists(baseDisk)) return baseDisk;
-
-    // Try current working directory (project root, common on Linux)
+    // Try current working directory first (project root, used by dotnet run)
     string cwdDisk = Path.Combine(Directory.GetCurrentDirectory(), "disk");
     if (Directory.Exists(cwdDisk)) return cwdDisk;
 
-    // Default to base directory (will be created on SAVE)
-    return baseDisk;
+    // Try AppContext.BaseDirectory (build output, for standalone execution)
+    string baseDisk = Path.Combine(AppContext.BaseDirectory, "disk");
+    if (Directory.Exists(baseDisk)) return baseDisk;
+
+    // Default to current working directory (will be created on SAVE)
+    return cwdDisk;
 }
 
 // Resolves a filename within the Disk folder using case-insensitive matching.
@@ -461,6 +461,7 @@ private void ExecuteStatement()
         {
             case TokenType.PRINT: ExecutePrint(); break;
             case TokenType.INPUT: ExecuteInput(); break;
+            case TokenType.GET: ExecuteGet(); break;
             case TokenType.LET: _tokenPos++; ExecuteLet(); break;
             case TokenType.IF: ExecuteIf(); break;
             case TokenType.GOTO: ExecuteGoto(); break;
@@ -539,6 +540,31 @@ private void ExecutePrint()
 
         if (needNewline)
             Console.WriteLine();
+    }
+
+// Executes the GET statement, reading a single keypress without waiting for Enter.
+// On the Apple II, GET reads one character from the keyboard.
+private void ExecuteGet()
+    {
+        _tokenPos++; // skip GET
+        string varName = CurrentToken.Text;
+        _tokenPos++;
+
+        // Read a single key without displaying it
+        var key = Console.ReadKey(true);
+        string ch = key.KeyChar == '\r' || key.KeyChar == '\n' ? "\r" : key.KeyChar.ToString();
+
+        if (varName.EndsWith('$'))
+            SetVariable(varName, BasicValue.FromString(ch.ToUpper()));
+        else
+        {
+            // Numeric GET returns the ASCII value... but on real Apple II
+            // GET to a numeric var is unusual. Store 0 if not a digit.
+            if (double.TryParse(ch, out double num))
+                SetVariable(varName, BasicValue.FromNumber(num));
+            else
+                SetVariable(varName, BasicValue.FromNumber(0));
+        }
     }
 
 // Executes the INPUT statement.
