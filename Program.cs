@@ -11,7 +11,6 @@ Console.WriteLine("  Type BASIC commands or line-numbered programs.");
 Console.WriteLine("  Commands: RUN, LIST, NEW, SAVE <filename>, LOAD <filename>, CATALOG");
 Console.WriteLine("  Type QUIT or EXIT to leave.");
 Console.WriteLine();
-Console.WriteLine("]");
 
 // Entry point for the Applesoft BASIC Emulator application.
 var interpreter = new Interpreter();
