@@ -350,6 +350,15 @@ public class ExpressionEvaluator
                 Expect(TokenType.RightParen);
                 return BasicValue.FromNumber(Console.CursorLeft);
 
+            case TokenType.SCRN:
+                Advance();
+                Expect(TokenType.LeftParen);
+                var scrnX = Evaluate();
+                Expect(TokenType.Comma);
+                var scrnY = Evaluate();
+                Expect(TokenType.RightParen);
+                return BasicValue.FromNumber(_interpreter.GetScrnColor((int)scrnX.NumberValue, (int)scrnY.NumberValue));
+
             // String functions
             case TokenType.LEN:
                 Advance();

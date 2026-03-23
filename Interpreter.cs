@@ -89,6 +89,32 @@ private int _programIndex;
 // Simulated memory for PEEK and POKE operations.
 private readonly byte[] _memory = new byte[65536];
 
+// LORES graphics (40 columns x 40 rows, 16 colors)
+private byte[,] _loRes = new byte[40, 40];
+private int _loResColor;
+private bool _graphicsMode;
+
+// Apple II LORES 16-color palette (approximate RGB)
+private static readonly (int R, int G, int B)[] LoResColors =
+{
+    (  0,   0,   0),  // 0  Black
+    (221,   0,  51),  // 1  Red
+    (  0,   0, 204),  // 2  Dark Blue
+    (187,   0, 204),  // 3  Purple
+    (  0, 170,   0),  // 4  Dark Green
+    (128, 128, 128),  // 5  Gray 1
+    ( 34,  34, 221),  // 6  Medium Blue
+    (102, 170, 255),  // 7  Light Blue
+    ( 85,  51,   0),  // 8  Brown
+    (255, 119,   0),  // 9  Orange
+    (170, 170, 170),  // 10 Gray 2
+    (255, 119, 119),  // 11 Pink
+    (  0, 221,   0),  // 12 Light Green
+    (238, 238,   0),  // 13 Yellow
+    (  0, 238, 238),  // 14 Aqua
+    (255, 255, 255),  // 15 White
+};
+
 // Path to the Disk folder used for SAVE, LOAD, and CATALOG.
 // Resolves the Disk folder from the base directory or the current working directory.
 private static readonly string DiskPath = ResolveDiskPath();
@@ -387,6 +413,15 @@ public void SetArrayValue(string name, List<int> indices, BasicValue value)
         _arrays[key][flatIndex] = value;
     }
 
+// Returns the LORES color index at the given pixel coordinate.
+// x: The column (0-39). y: The row (0-39).
+// Returns: Color index 0-15, or 0 if out of range or not in graphics mode.
+public int GetScrnColor(int x, int y)
+{
+    if (!_graphicsMode || x < 0 || x >= 40 || y < 0 || y >= 40) return 0;
+    return _loRes[x, y];
+}
+
 // Returns a pseudo-random number between 0 and 1.
 // arg: If negative, seeds the generator; otherwise, returns a random value.
 // Returns: A random double between 0 and 1.
@@ -478,11 +513,33 @@ private void ExecuteStatement()
             case TokenType.RESTORE: _dataPointer = 0; _tokenPos++; break;
             case TokenType.DEF: ExecuteDef(); break;
             case TokenType.ON: ExecuteOn(); break;
-            case TokenType.HOME: Console.Clear(); _tokenPos++; break;
+            case TokenType.HOME:
+                if (_graphicsMode)
+                {
+                    // In GR mode, clear only the 4-line text area at the bottom
+                    int savedL = Console.CursorLeft, savedT = Console.CursorTop;
+                    for (int r = 20; r < 24; r++)
+                    {
+                        try { Console.SetCursorPosition(0, r); Console.Write(new string(' ', 40)); } catch { }
+                    }
+                    try { Console.SetCursorPosition(0, 20); } catch { }
+                }
+                else
+                {
+                    Console.Clear();
+                }
+                _tokenPos++;
+                break;
             case TokenType.HTAB: ExecuteHtab(); break;
             case TokenType.VTAB: ExecuteVtab(); break;
             case TokenType.POKE: ExecutePoke(); break;
             case TokenType.CALL: ExecuteCall(); break;
+            case TokenType.GR: ExecuteGr(); break;
+            case TokenType.TEXT: ExecuteText(); break;
+            case TokenType.COLOR: ExecuteColor(); break;
+            case TokenType.PLOT: ExecutePlot(); break;
+            case TokenType.HLIN: ExecuteHlin(); break;
+            case TokenType.VLIN: ExecuteVlin(); break;
             case TokenType.RUN: ExecuteRun(); break;
             case TokenType.LIST: ExecuteList(); break;
             case TokenType.NEW: NewProgram(); _tokenPos++; break;
@@ -1211,6 +1268,159 @@ private void ExecuteLoadCmd()
         else
             throw new BasicException("?SYNTAX ERROR: FILENAME EXPECTED");
     }
+
+// Renders one terminal row (covers two LORES pixel rows) using half-block Unicode characters
+// and 24-bit ANSI color. termRow 0 covers LORES rows 0-1, termRow 1 covers rows 2-3, etc.
+private void RenderLoResRow(int termRow)
+{
+    Console.SetCursorPosition(0, termRow);
+    var sb = new System.Text.StringBuilder(40 * 40);
+    for (int x = 0; x < 40; x++)
+    {
+        int topIdx = _loRes[x, termRow * 2];
+        int botIdx = termRow * 2 + 1 < 40 ? _loRes[x, termRow * 2 + 1] : 0;
+        var top = LoResColors[topIdx];  // background = top half
+        var bot = LoResColors[botIdx];  // foreground = bottom half
+        // ▄ (U+2584) lower-half block: fg paints bottom, bg paints top
+        sb.Append($"\x1b[38;2;{bot.R};{bot.G};{bot.B}m\x1b[48;2;{top.R};{top.G};{top.B}m\u2584");
+    }
+    sb.Append("\x1b[0m");
+    Console.Write(sb.ToString());
+}
+
+// Sets one LORES pixel and immediately redraws the affected terminal row.
+private void PlotPixel(int x, int y, int color)
+{
+    if (x < 0 || x >= 40 || y < 0 || y >= 40) return;
+    _loRes[x, y] = (byte)(color & 0xF);
+    int savedLeft = Console.CursorLeft, savedTop = Console.CursorTop;
+    RenderLoResRow(y / 2);
+    try { Console.SetCursorPosition(savedLeft, savedTop); } catch { }
+}
+
+// Executes the GR statement: switch to LORES graphics mode.
+// Clears the screen and renders a 40x20 terminal block (40x40 LORES pixels)
+// with 4 text rows below (rows 20-23), matching Apple II mixed GR mode.
+private void ExecuteGr()
+{
+    _tokenPos++;
+    _graphicsMode = true;
+    _loRes = new byte[40, 40];
+    _loResColor = 0;
+    Console.OutputEncoding = System.Text.Encoding.UTF8;
+    Console.Clear();
+    for (int row = 0; row < 20; row++)
+        RenderLoResRow(row);
+    try { Console.SetCursorPosition(0, 20); } catch { }
+}
+
+// Executes the TEXT statement: return to full text mode.
+private void ExecuteText()
+{
+    _tokenPos++;
+    _graphicsMode = false;
+    Console.Clear();
+}
+
+// Executes the COLOR= statement: set the current drawing color (0-15).
+private void ExecuteColor()
+{
+    _tokenPos++; // skip COLOR
+    if (CurrentToken.Type != TokenType.Equal)
+        throw new BasicException("?SYNTAX ERROR");
+    _tokenPos++; // skip =
+    _evaluator.Init(_currentTokens, _tokenPos);
+    int color = (int)_evaluator.Evaluate().NumberValue;
+    _tokenPos = _evaluator.Position;
+    _loResColor = Math.Clamp(color, 0, 15);
+}
+
+// Executes the PLOT x,y statement: draw a pixel at (x,y) in the current color.
+private void ExecutePlot()
+{
+    _tokenPos++;
+    _evaluator.Init(_currentTokens, _tokenPos);
+    int x = (int)_evaluator.Evaluate().NumberValue;
+    _tokenPos = _evaluator.Position;
+
+    if (CurrentToken.Type != TokenType.Comma)
+        throw new BasicException("?SYNTAX ERROR");
+    _tokenPos++;
+
+    _evaluator.Init(_currentTokens, _tokenPos);
+    int y = (int)_evaluator.Evaluate().NumberValue;
+    _tokenPos = _evaluator.Position;
+
+    PlotPixel(x, y, _loResColor);
+}
+
+// Executes HLIN x1,x2 AT y: draw a horizontal line from x1 to x2 at row y.
+private void ExecuteHlin()
+{
+    _tokenPos++;
+    _evaluator.Init(_currentTokens, _tokenPos);
+    int x1 = (int)_evaluator.Evaluate().NumberValue;
+    _tokenPos = _evaluator.Position;
+
+    if (CurrentToken.Type != TokenType.Comma)
+        throw new BasicException("?SYNTAX ERROR");
+    _tokenPos++;
+
+    _evaluator.Init(_currentTokens, _tokenPos);
+    int x2 = (int)_evaluator.Evaluate().NumberValue;
+    _tokenPos = _evaluator.Position;
+
+    if (CurrentToken.Type != TokenType.AT)
+        throw new BasicException("?SYNTAX ERROR: EXPECTED AT");
+    _tokenPos++;
+
+    _evaluator.Init(_currentTokens, _tokenPos);
+    int y = (int)_evaluator.Evaluate().NumberValue;
+    _tokenPos = _evaluator.Position;
+
+    if (y < 0 || y >= 40) return;
+    int savedLeft = Console.CursorLeft, savedTop = Console.CursorTop;
+    for (int x = Math.Min(x1, x2); x <= Math.Max(x1, x2); x++)
+        if (x >= 0 && x < 40)
+            _loRes[x, y] = (byte)(_loResColor & 0xF);
+    RenderLoResRow(y / 2);
+    try { Console.SetCursorPosition(savedLeft, savedTop); } catch { }
+}
+
+// Executes VLIN y1,y2 AT x: draw a vertical line from y1 to y2 at column x.
+private void ExecuteVlin()
+{
+    _tokenPos++;
+    _evaluator.Init(_currentTokens, _tokenPos);
+    int y1 = (int)_evaluator.Evaluate().NumberValue;
+    _tokenPos = _evaluator.Position;
+
+    if (CurrentToken.Type != TokenType.Comma)
+        throw new BasicException("?SYNTAX ERROR");
+    _tokenPos++;
+
+    _evaluator.Init(_currentTokens, _tokenPos);
+    int y2 = (int)_evaluator.Evaluate().NumberValue;
+    _tokenPos = _evaluator.Position;
+
+    if (CurrentToken.Type != TokenType.AT)
+        throw new BasicException("?SYNTAX ERROR: EXPECTED AT");
+    _tokenPos++;
+
+    _evaluator.Init(_currentTokens, _tokenPos);
+    int x = (int)_evaluator.Evaluate().NumberValue;
+    _tokenPos = _evaluator.Position;
+
+    if (x < 0 || x >= 40) return;
+    int savedLeft = Console.CursorLeft, savedTop = Console.CursorTop;
+    int lo = Math.Max(0, Math.Min(y1, y2));
+    int hi = Math.Min(39, Math.Max(y1, y2));
+    for (int y = lo; y <= hi; y++)
+        _loRes[x, y] = (byte)(_loResColor & 0xF);
+    for (int r = lo / 2; r <= hi / 2; r++)
+        RenderLoResRow(r);
+    try { Console.SetCursorPosition(savedLeft, savedTop); } catch { }
+}
 
 // Executes the DEL statement, deleting program lines in a range.
 private void ExecuteDel()

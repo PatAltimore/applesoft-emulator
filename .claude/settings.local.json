@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la /c/Users/palti/git/applesoft-emulator/*.cs)",
+      "Bash(dotnet build:*)",
+      "Bash(findstr /i \"error CS warning CS\")"
+    ]
+  }
+}

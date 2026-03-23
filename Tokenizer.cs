@@ -24,10 +24,11 @@ namespace ApplesoftEmulator;
     HOME, HTAB, VTAB,
     TAB, SPC,
     PEEK, POKE, CALL,
+    GR, TEXT, COLOR, PLOT, HLIN, VLIN, AT,
 
     // Built-in functions
     ABS, INT, SQR, RND, SGN, SIN, COS, TAN, ATN, LOG, EXP,
-    LEN, VAL, STR, CHR, ASC, LEFT, RIGHT, MID, POS,
+    LEN, VAL, STR, CHR, ASC, LEFT, RIGHT, MID, POS, SCRN,
 
     // Special
     EndOfLine,
@@ -85,6 +86,9 @@ public class Token
         ["HOME"] = TokenType.HOME, ["HTAB"] = TokenType.HTAB, ["VTAB"] = TokenType.VTAB,
         ["TAB"] = TokenType.TAB, ["SPC"] = TokenType.SPC,
         ["PEEK"] = TokenType.PEEK, ["POKE"] = TokenType.POKE, ["CALL"] = TokenType.CALL,
+        ["GR"] = TokenType.GR, ["TEXT"] = TokenType.TEXT,
+        ["COLOR"] = TokenType.COLOR, ["PLOT"] = TokenType.PLOT,
+        ["HLIN"] = TokenType.HLIN, ["VLIN"] = TokenType.VLIN, ["AT"] = TokenType.AT,
         ["ABS"] = TokenType.ABS, ["INT"] = TokenType.INT, ["SQR"] = TokenType.SQR,
         ["RND"] = TokenType.RND, ["SGN"] = TokenType.SGN,
         ["SIN"] = TokenType.SIN, ["COS"] = TokenType.COS, ["TAN"] = TokenType.TAN,
@@ -92,7 +96,7 @@ public class Token
         ["LEN"] = TokenType.LEN, ["VAL"] = TokenType.VAL,
         ["STR$"] = TokenType.STR, ["CHR$"] = TokenType.CHR, ["ASC"] = TokenType.ASC,
         ["LEFT$"] = TokenType.LEFT, ["RIGHT$"] = TokenType.RIGHT, ["MID$"] = TokenType.MID,
-        ["POS"] = TokenType.POS,
+        ["POS"] = TokenType.POS, ["SCRN"] = TokenType.SCRN,
     };
 
         // The input string being tokenized.
