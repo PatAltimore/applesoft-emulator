@@ -513,6 +513,11 @@ private void ExecuteStatement()
             case TokenType.RESTORE: _dataPointer = 0; _tokenPos++; break;
             case TokenType.DEF: ExecuteDef(); break;
             case TokenType.ON: ExecuteOn(); break;
+            case TokenType.LOMEM: ExecuteLomem(); break;
+            case TokenType.INHash:
+            case TokenType.PRHash:
+                ExecuteChannelSelect();
+                break;
             case TokenType.HOME:
                 if (_graphicsMode)
                 {
@@ -1191,6 +1196,36 @@ private void ExecuteCall()
         _evaluator.Init(_currentTokens, _tokenPos);
         _evaluator.Evaluate(); // evaluate and discard - no real machine code to run
         _tokenPos = _evaluator.Position;
+    }
+
+// Executes LOMEM as a compatibility no-op.
+// Applesoft commonly uses "LOMEM: <expr>"; consume any provided expression.
+private void ExecuteLomem()
+    {
+        _tokenPos++; // skip LOMEM
+
+        if (CurrentToken.Type == TokenType.Colon || CurrentToken.Type == TokenType.Equal)
+            _tokenPos++;
+
+        if (CurrentToken.Type != TokenType.EndOfLine && CurrentToken.Type != TokenType.Colon)
+        {
+            _evaluator.Init(_currentTokens, _tokenPos);
+            _evaluator.Evaluate(); // evaluate and discard
+            _tokenPos = _evaluator.Position;
+        }
+    }
+
+// Executes IN# / PR# channel-select statements as compatibility no-ops.
+private void ExecuteChannelSelect()
+    {
+        _tokenPos++; // skip IN# or PR# token
+
+        if (CurrentToken.Type != TokenType.EndOfLine && CurrentToken.Type != TokenType.Colon)
+        {
+            _evaluator.Init(_currentTokens, _tokenPos);
+            _evaluator.Evaluate(); // evaluate and discard
+            _tokenPos = _evaluator.Position;
+        }
     }
 
 // Executes the RUN statement, starting program execution optionally from a line.

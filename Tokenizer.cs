@@ -21,6 +21,9 @@ namespace ApplesoftEmulator;
     DATA, READ, RESTORE,
     DEF, FN,
     ON,
+    LOMEM,
+    INHash,
+    PRHash,
     HOME, HTAB, VTAB,
     TAB, SPC,
     PEEK, POKE, CALL,
@@ -83,6 +86,7 @@ public class Token
         ["DATA"] = TokenType.DATA, ["READ"] = TokenType.READ, ["RESTORE"] = TokenType.RESTORE,
         ["DEF"] = TokenType.DEF, ["FN"] = TokenType.FN,
         ["ON"] = TokenType.ON,
+        ["LOMEM"] = TokenType.LOMEM,
         ["HOME"] = TokenType.HOME, ["HTAB"] = TokenType.HTAB, ["VTAB"] = TokenType.VTAB,
         ["TAB"] = TokenType.TAB, ["SPC"] = TokenType.SPC,
         ["PEEK"] = TokenType.PEEK, ["POKE"] = TokenType.POKE, ["CALL"] = TokenType.CALL,
@@ -173,6 +177,7 @@ public class Token
         }
 
         string text = _input[start.._pos];
+
         double value = double.Parse(text, System.Globalization.CultureInfo.InvariantCulture);
         return new Token(TokenType.Number, text, value);
     }
@@ -206,6 +211,18 @@ public class Token
         }
 
         string text = _input[start.._pos];
+
+        // Applesoft channel select syntax uses IN# / PR# tokens.
+        if (text.Equals("IN", StringComparison.OrdinalIgnoreCase) && _pos < _input.Length && _input[_pos] == '#')
+        {
+            _pos++;
+            return new Token(TokenType.INHash, "IN#");
+        }
+        if (text.Equals("PR", StringComparison.OrdinalIgnoreCase) && _pos < _input.Length && _input[_pos] == '#')
+        {
+            _pos++;
+            return new Token(TokenType.PRHash, "PR#");
+        }
 
         // Check for keywords (try with $ first for STR$, CHR$, etc.)
         if (Keywords.TryGetValue(text, out var kwType))
