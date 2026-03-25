@@ -276,11 +276,15 @@ public class Token
         // Returns: True if the character matched and position was advanced; otherwise, false.
         private bool PeekAndAdvance(char expected)
     {
+        int savedPos = _pos;
+        while (_pos < _input.Length && _input[_pos] == ' ')
+            _pos++;
         if (_pos < _input.Length && _input[_pos] == expected)
         {
             _pos++;
             return true;
         }
+        _pos = savedPos;
         return false;
     }
 }
