@@ -33,6 +33,8 @@ public int LineNumber { get; set; }
 public int TokenPosition { get; set; }
 // Gets or sets the program index for the FOR statement.
 public int ProgramIndex { get; set; }
+// True when the loop body is empty (FOR x TO y: NEXT) — a delay loop.
+public bool IsEmptyBody { get; set; }
 }
 
 // User-defined function (DEF FN)
@@ -474,12 +476,16 @@ private void ExecuteStatements()
         {
             ExecuteStatement();
 
-            // Handle colon-separated statements
-            if (_tokenPos < _currentTokens.Count && _currentTokens[_tokenPos].Type == TokenType.Colon)
+            // Handle colon-separated statements.
+            // Skip ALL consecutive colons — multiple colons (e.g. :::) are valid empty
+            // statements in Applesoft BASIC and must not be passed to ExecuteStatement.
+            bool foundColon = false;
+            while (_tokenPos < _currentTokens.Count && _currentTokens[_tokenPos].Type == TokenType.Colon)
             {
                 _tokenPos++;
-                continue;
+                foundColon = true;
             }
+            if (foundColon) continue;
             break;
         }
     }
@@ -914,6 +920,14 @@ private void ExecuteFor()
 
         SetVariable(varName, BasicValue.FromNumber(startVal.NumberValue));
 
+        // Detect empty-body delay loop: skip colons and check if NEXT follows immediately.
+        bool isEmpty = false;
+        int peek = _tokenPos;
+        while (peek < _currentTokens.Count && _currentTokens[peek].Type == TokenType.Colon)
+            peek++;
+        if (peek < _currentTokens.Count && _currentTokens[peek].Type == TokenType.NEXT)
+            isEmpty = true;
+
         _forStack.Push(new ForState
         {
             Variable = varName.ToUpper(),
@@ -921,7 +935,8 @@ private void ExecuteFor()
             StepValue = step,
             LineNumber = _currentLineNumber,
             TokenPosition = _tokenPos,
-            ProgramIndex = _programIndex
+            ProgramIndex = _programIndex,
+            IsEmptyBody = isEmpty
         });
     }
 
@@ -971,6 +986,11 @@ private void ExecuteNext()
         double currentVal = GetVariable(forState.Variable).NumberValue + forState.StepValue;
         SetVariable(forState.Variable, BasicValue.FromNumber(currentVal));
 
+        // Approximate Apple II timing (1 MHz → ~1000 FOR/NEXT iterations/sec) for empty
+        // delay loops so that delays like "FOR I = 1 TO 2000: NEXT" pause visibly.
+        if (forState.IsEmptyBody)
+            System.Threading.Thread.Sleep(1);
+
         bool done = forState.StepValue > 0
             ? currentVal > forState.Limit
             : currentVal < forState.Limit;
@@ -979,6 +999,13 @@ private void ExecuteNext()
         {
             // Loop back
             _programIndex = forState.ProgramIndex;
+            // For same-line FOR/NEXT, restore token position to loop body start.
+            // Without this, the remaining tokens after NEXT on the same line execute
+            // instead of the loop body, so the loop only runs once.
+            if (forState.LineNumber == _currentLineNumber)
+            {
+                _tokenPos = forState.TokenPosition;
+            }
         }
         else
         {
@@ -1308,7 +1335,7 @@ private void ExecuteLoadCmd()
 // and 24-bit ANSI color. termRow 0 covers LORES rows 0-1, termRow 1 covers rows 2-3, etc.
 private void RenderLoResRow(int termRow)
 {
-    Console.SetCursorPosition(0, termRow);
+    try { Console.SetCursorPosition(0, termRow); } catch { return; }
     var sb = new System.Text.StringBuilder(40 * 40);
     for (int x = 0; x < 40; x++)
     {
