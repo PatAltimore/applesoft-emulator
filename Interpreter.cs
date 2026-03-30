@@ -60,7 +60,7 @@ private readonly Dictionary<string, int[]> _arrayDimensions = new();
 // Stack for managing nested FOR/NEXT loops.
 private readonly Stack<ForState> _forStack = new();
 // Stack for managing GOSUB/RETURN calls.
-private readonly Stack<(int lineNumber, int tokenPos, int progIdx)> _gosubStack = new();
+private readonly Stack<(List<Token> tokens, int tokenPos, int progIdx, int lineNum)> _gosubStack = new();
 // Stores user-defined functions (DEF FN) by name.
 private readonly Dictionary<string, UserFunction> _userFunctions = new();
 // Stores DATA values collected from the program.
@@ -82,6 +82,8 @@ private int _tokenPos;
 private int _currentLineNumber;
 // Indicates whether the interpreter is currently running a program.
 private bool _running;
+// Set to true by GotoLine/ExecuteReturn so ExecuteStatements exits immediately.
+private bool _jumped;
 // List of line numbers in the current program.
 private List<int> _lineNumbers = new();
 // The current index in the line number list.
@@ -95,6 +97,25 @@ private readonly byte[] _memory = new byte[65536];
 private byte[,] _loRes = new byte[40, 40];
 private int _loResColor;
 private bool _graphicsMode;
+
+// Apple II soft text window (controlled by POKE 32-35).
+// These mirror the Apple II zero-page locations:
+//   32 ($20) = left margin (0-based column)
+//   33 ($21) = right margin+1 (so 40 = full width)
+//   34 ($22) = top row of text window (0-based)
+//   35 ($23) = bottom row of text window (0-based)
+private int _winLeft   = 0;   // POKE 32
+private int _winRight  = 40;  // POKE 33 (stored as +1 to match Apple II)
+private int _winTop    = 0;   // POKE 34
+private int _winBottom = 23;  // POKE 35
+
+// Speaker emulation: tracks POKE 49200 (Apple II $C030) toggles and synthesizes beeps.
+private int _speakerToggleCount;
+private long _speakerBurstStartTicks;
+private long _speakerLastToggleTicks;
+private static readonly System.Diagnostics.Stopwatch _speakerClock = System.Diagnostics.Stopwatch.StartNew();
+// Approximate Apple II Applesoft speed: ~1500 BASIC FOR/NEXT iterations per second at 1 MHz.
+private const double AppleIIMsPerToggle = 0.67;
 
 // Apple II LORES 16-color palette (approximate RGB)
 private static readonly (int R, int G, int B)[] LoResColors =
@@ -182,6 +203,8 @@ public void Run(int startLine = -1)
         _forStack.Clear();
         _gosubStack.Clear();
         _dataPointer = 0;
+        _winLeft = 0; _winRight = 40; _winTop = 0; _winBottom = 23;
+        _graphicsMode = false;
         CollectData();
 
         _lineNumbers = new List<int>(_program.Keys);
@@ -203,17 +226,24 @@ public void Run(int startLine = -1)
         }
 
         _running = true;
+        _jumped = false;
 
         try
         {
-            while (_running && _programIndex < _lineNumbers.Count)
+            while (_running)
             {
-                _currentLineNumber = _lineNumbers[_programIndex];
-                string line = _program[_currentLineNumber];
-                _currentTokens = _tokenizer.Tokenize(line);
-                _tokenPos = 0;
-                _programIndex++;
+                if (!_jumped)
+                {
+                    // Advance to the next sequential line.
+                    if (_programIndex >= _lineNumbers.Count) break;
+                    _currentLineNumber = _lineNumbers[_programIndex];
+                    _currentTokens = _tokenizer.Tokenize(_program[_currentLineNumber]);
+                    _tokenPos = 0;
+                    _programIndex++;
+                }
 
+                // Execute the current line (or the mid-line position set by a jump).
+                _jumped = false;
                 ExecuteStatements();
             }
         }
@@ -229,6 +259,10 @@ public void Run(int startLine = -1)
         {
             Console.WriteLine($"?ERROR: {ex.Message} IN {_currentLineNumber}");
         }
+        finally
+        {
+            FlushSpeaker(); // play any remaining sound after program ends
+        }
     }
 
 // Executes a single line of Applesoft BASIC code directly (immediate mode).
@@ -239,15 +273,27 @@ public void ExecuteDirect(string line)
         _tokenPos = 0;
         _currentLineNumber = 0;
         _running = true;
+        _jumped = false;
         _lineNumbers = new List<int>(_program.Keys);
 
         try
         {
-            ExecuteStatements();
+            // Direct mode: execute the single line, then follow any jumps (e.g. RUN).
+            while (_running)
+            {
+                _jumped = false;
+                ExecuteStatements();
+                if (!_jumped) break;
+                // A jump (e.g. GOTO/RUN) was issued — continue from the new position.
+            }
         }
         catch (BasicException ex)
         {
             Console.WriteLine(ex.Message);
+        }
+        finally
+        {
+            FlushSpeaker();
         }
     }
 
@@ -443,6 +489,60 @@ public int Peek(int address)
         return 0;
     }
 
+// Records a single speaker toggle at POKE 49200 ($C030).
+private void ToggleSpeaker()
+{
+    long now = _speakerClock.ElapsedTicks;
+    if (_speakerToggleCount == 0)
+        _speakerBurstStartTicks = now;
+    _speakerLastToggleTicks = now;
+    _speakerToggleCount++;
+}
+
+// Synthesizes and plays any accumulated speaker toggles as an audible beep.
+// Tight loops (no inter-toggle delay) are mapped to 880 Hz with duration scaled to
+// real Apple II speed.  Delay loops (empty FOR used as a divider) produce a lower
+// frequency derived from the measured inter-toggle interval.
+private void FlushSpeaker()
+{
+    if (_speakerToggleCount < 2)
+    {
+        _speakerToggleCount = 0;
+        return;
+    }
+
+    double elapsedMs = (_speakerLastToggleTicks - _speakerBurstStartTicks)
+                       * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+    double avgIntervalMs = elapsedMs / (_speakerToggleCount - 1);
+
+    int frequency;
+    int durationMs;
+
+    if (avgIntervalMs < 1.0)
+    {
+        // Tight loop (no per-toggle delay): use Apple II calibrated timing.
+        // Each full wave requires 2 toggles → frequency ≈ 750 Hz on real hardware;
+        // we round to A5 (880 Hz) for a clean tone.
+        frequency = 880;
+        durationMs = (int)(_speakerToggleCount * AppleIIMsPerToggle);
+    }
+    else
+    {
+        // Delay loop: the empty inner FOR/NEXT sleeps 1 ms per iteration (AppleII pacing),
+        // so the Stopwatch interval reflects the intended period.
+        // One full wave = 2 toggles → freq = 1/(2 * interval_sec) = 500 / interval_ms.
+        frequency = Math.Clamp((int)(500.0 / avgIntervalMs), 37, 32767);
+        durationMs = (int)elapsedMs;
+    }
+
+    durationMs = Math.Clamp(durationMs, 5, 10000);
+#pragma warning disable CA1416 // Console.Beep is Windows-only; non-Windows falls into the catch silently
+    try { Console.Beep(frequency, durationMs); } catch { }
+#pragma warning restore CA1416
+
+    _speakerToggleCount = 0;
+}
+
 // Calls a user-defined function (DEF FN) with the specified argument.
 // name: The function name.
 // arg: The argument to pass to the function.
@@ -472,21 +572,16 @@ public BasicValue CallUserFunction(string name, BasicValue arg)
 // Executes all statements in the current line.
 private void ExecuteStatements()
     {
-        while (_running && _tokenPos < _currentTokens.Count && _currentTokens[_tokenPos].Type != TokenType.EndOfLine)
+        while (_running && !_jumped && _tokenPos < _currentTokens.Count && _currentTokens[_tokenPos].Type != TokenType.EndOfLine)
         {
-            ExecuteStatement();
-
-            // Handle colon-separated statements.
-            // Skip ALL consecutive colons — multiple colons (e.g. :::) are valid empty
-            // statements in Applesoft BASIC and must not be passed to ExecuteStatement.
-            bool foundColon = false;
+            // Skip any leading colons (e.g. when resuming mid-line after RETURN).
             while (_tokenPos < _currentTokens.Count && _currentTokens[_tokenPos].Type == TokenType.Colon)
-            {
                 _tokenPos++;
-                foundColon = true;
-            }
-            if (foundColon) continue;
-            break;
+
+            if (_tokenPos >= _currentTokens.Count || _currentTokens[_tokenPos].Type == TokenType.EndOfLine)
+                break;
+
+            ExecuteStatement();
         }
     }
 
@@ -525,19 +620,12 @@ private void ExecuteStatement()
                 ExecuteChannelSelect();
                 break;
             case TokenType.HOME:
-                if (_graphicsMode)
+                // Clear only the active text window and home the cursor to its top-left.
                 {
-                    // In GR mode, clear only the 4-line text area at the bottom
-                    int savedL = Console.CursorLeft, savedT = Console.CursorTop;
-                    for (int r = 20; r < 24; r++)
-                    {
-                        try { Console.SetCursorPosition(0, r); Console.Write(new string(' ', 40)); } catch { }
-                    }
-                    try { Console.SetCursorPosition(0, 20); } catch { }
-                }
-                else
-                {
-                    Console.Clear();
+                    int winW = Math.Max(0, _winRight - _winLeft);
+                    for (int r = _winTop; r <= _winBottom; r++)
+                        try { Console.SetCursorPosition(_winLeft, r); Console.Write(new string(' ', winW)); } catch { }
+                    try { Console.SetCursorPosition(_winLeft, _winTop); } catch { }
                 }
                 _tokenPos++;
                 break;
@@ -607,8 +695,48 @@ private void ExecutePrint()
         }
 
         if (needNewline)
-            Console.WriteLine();
+            PrintNewline();
     }
+
+// Moves cursor to the next line within the text window, scrolling the window up if needed.
+private void PrintNewline()
+{
+    int nextRow = Console.CursorTop + 1;
+    if (nextRow <= _winBottom)
+    {
+        try { Console.SetCursorPosition(_winLeft, nextRow); } catch { Console.WriteLine(); }
+    }
+    else
+    {
+        // Scroll the window up one line.
+        int winW = Math.Max(0, _winRight - _winLeft);
+        for (int r = _winTop; r < _winBottom; r++)
+        {
+            // Read line below and copy it up — not directly possible via Console,
+            // so emit a real newline only when the cursor is at the bottom of the
+            // *full* terminal (which causes the OS to scroll); otherwise just reposition.
+            try { Console.SetCursorPosition(_winLeft, r + 1); } catch { }
+            // Can't read console content portably, so fall back to a real newline
+            // only when the window spans the full terminal width.
+        }
+        if (_winLeft == 0 && _winRight >= Console.WindowWidth)
+        {
+            // Full-width window — let the terminal scroll naturally.
+            Console.WriteLine();
+        }
+        else
+        {
+            // Narrow window: clear the bottom row and stay there.
+            try
+            {
+                Console.SetCursorPosition(_winLeft, _winBottom);
+                Console.Write(new string(' ', winW));
+                Console.SetCursorPosition(_winLeft, _winBottom);
+            }
+            catch { Console.WriteLine(); }
+        }
+    }
+}
 
 // Executes the GET statement, reading a single keypress without waiting for Enter.
 // On the Apple II, GET reads one character from the keyboard.
@@ -617,6 +745,8 @@ private void ExecuteGet()
         _tokenPos++; // skip GET
         string varName = CurrentToken.Text;
         _tokenPos++;
+
+        FlushSpeaker(); // play any queued sound before blocking for input
 
         // Read a single key without displaying it
         var key = Console.ReadKey(true);
@@ -639,6 +769,7 @@ private void ExecuteGet()
 private void ExecuteInput()
     {
         _tokenPos++; // skip INPUT
+        FlushSpeaker(); // play any queued sound before blocking for input
 
         // Optional prompt string
         string prompt = "? ";
@@ -837,11 +968,8 @@ private void ExecuteIf()
             {
                 GotoLine((int)CurrentToken.NumericValue);
             }
-            else
-            {
-                // Execute remaining statements
-                ExecuteStatements();
-            }
+            // else: condition true, THEN is followed by statements — leave _tokenPos
+            // pointing at the first statement; the outer ExecuteStatements loop continues.
         }
         else
         {
@@ -868,7 +996,7 @@ private void ExecuteGosub()
         int lineNum = (int)_evaluator.Evaluate().NumberValue;
         _tokenPos = _evaluator.Position;
 
-        _gosubStack.Push((_currentLineNumber, _tokenPos, _programIndex));
+        _gosubStack.Push((_currentTokens, _tokenPos, _programIndex, _currentLineNumber));
         GotoLine(lineNum);
     }
 
@@ -879,11 +1007,12 @@ private void ExecuteReturn()
         if (_gosubStack.Count == 0)
             throw new BasicException("?RETURN WITHOUT GOSUB ERROR");
 
-        var (lineNum, tokPos, progIdx) = _gosubStack.Pop();
+        var (savedTokens, tokPos, progIdx, savedLineNum) = _gosubStack.Pop();
+        _currentTokens = savedTokens;
+        _tokenPos = tokPos;
         _programIndex = progIdx;
-
-        // Skip any remaining statements on this line
-        _tokenPos = _currentTokens.Count - 1;
+        _currentLineNumber = savedLineNum;
+        _jumped = true; // resume mid-line in the caller
     }
 
 // Executes the FOR statement, initializing a FOR/NEXT loop.
@@ -999,18 +1128,26 @@ private void ExecuteNext()
         {
             // Loop back
             _programIndex = forState.ProgramIndex;
-            // For same-line FOR/NEXT, restore token position to loop body start.
-            // Without this, the remaining tokens after NEXT on the same line execute
-            // instead of the loop body, so the loop only runs once.
             if (forState.LineNumber == _currentLineNumber)
             {
+                // Same-line FOR/NEXT: restore token position to loop body start so the
+                // body re-executes instead of the tokens that follow NEXT.
                 _tokenPos = forState.TokenPosition;
+            }
+            else
+            {
+                // Multi-line FOR/NEXT: skip any remaining statements on the NEXT line.
+                // On real Applesoft, NEXT jumps directly back to the loop body — statements
+                // after NEXT on the same line (e.g. ": FOR I=1 TO 1000: NEXT") must not run
+                // on every loop iteration.
+                _tokenPos = _currentTokens.Count - 1;
             }
         }
         else
         {
-            // Done with loop
+            // Done with loop — play any sound accumulated during the loop body.
             _forStack.Pop();
+            FlushSpeaker();
         }
     }
 
@@ -1169,7 +1306,7 @@ private void ExecuteOn()
             int target = lineNums[index - 1];
             if (isGosub)
             {
-                _gosubStack.Push((_currentLineNumber, _tokenPos, _programIndex));
+                _gosubStack.Push((_currentTokens, _tokenPos, _programIndex, _currentLineNumber));
             }
             GotoLine(target);
         }
@@ -1211,6 +1348,20 @@ private void ExecutePoke()
         _evaluator.Init(_currentTokens, _tokenPos);
         int val = (int)_evaluator.Evaluate().NumberValue;
         _tokenPos = _evaluator.Position;
+
+        // Normalise address: Applesoft programs use both 49200 and -16336 for the speaker.
+        int normalizedAddr = addr < 0 ? addr + 65536 : addr;
+        if (normalizedAddr == 0xC030) // $C030 = 49200 — Apple II speaker toggle
+            ToggleSpeaker();
+
+        // Apple II soft text-window zero-page locations.
+        switch (normalizedAddr)
+        {
+            case 32: _winLeft   = Math.Clamp(val, 0, 39);  break; // left margin (0-based)
+            case 33: _winRight  = Math.Clamp(val, 0, 40);  break; // right margin + 1
+            case 34: _winTop    = Math.Clamp(val, 0, 23);  break; // top row (0-based)
+            case 35: _winBottom = Math.Clamp(val, 0, 23);  break; // bottom row (0-based)
+        }
 
         if (addr >= 0 && addr < 65536)
             _memory[addr] = (byte)(val & 0xFF);
@@ -1369,6 +1520,8 @@ private void ExecuteGr()
     _graphicsMode = true;
     _loRes = new byte[40, 40];
     _loResColor = 0;
+    // GR sets the text window to rows 20-23 (4-line mixed area at the bottom).
+    _winLeft = 0; _winRight = 40; _winTop = 20; _winBottom = 23;
     Console.OutputEncoding = System.Text.Encoding.UTF8;
     Console.Clear();
     for (int row = 0; row < 20; row++)
@@ -1381,6 +1534,8 @@ private void ExecuteText()
 {
     _tokenPos++;
     _graphicsMode = false;
+    // Restore full-screen text window.
+    _winLeft = 0; _winRight = 40; _winTop = 0; _winBottom = 23;
     Console.Clear();
 }
 
@@ -1514,23 +1669,17 @@ private void GotoLine(int lineNumber)
         int idx = _lineNumbers.IndexOf(lineNumber);
         if (idx < 0)
         {
-            // Find the exact line
             if (!_program.ContainsKey(lineNumber))
                 throw new BasicException("?UNDEF'D STATEMENT ERROR");
             _lineNumbers = new List<int>(_program.Keys);
             idx = _lineNumbers.IndexOf(lineNumber);
         }
-        _programIndex = idx;
 
-        // Set up for immediate execution of that line
         _currentLineNumber = lineNumber;
         _currentTokens = _tokenizer.Tokenize(_program[lineNumber]);
         _tokenPos = 0;
         _programIndex = idx + 1;
-
-        ExecuteStatements();
-
-        // After executing the goto target, continue from there
+        _jumped = true; // signal ExecuteStatements to stop current line
     }
 
 // Collects all DATA values from the program into the _dataValues list.
