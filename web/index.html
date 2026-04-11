@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@400;700&family=VT323&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <script src="config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -45,35 +46,7 @@
           </dl>
         </section>
 
-        <section>
-          <h2>Disks</h2>
-          <div class="button-grid">
-            <button type="button" data-sequence="catalog">CATALOG</button>
-            <button type="button" data-sequence="lemonade">LEMONADE</button>
-            <button type="button" data-sequence="adventure">ADVENTURE</button>
-            <button type="button" data-sequence="guess">GUESS</button>
-          </div>
-        </section>
 
-        <section>
-          <h2>Disk Browser</h2>
-          <div class="button-grid">
-            <button type="button" id="scan-disk">SCAN DISK</button>
-            <button type="button" id="load-selected">LOAD SELECTED</button>
-            <button type="button" id="run-selected">RUN SELECTED</button>
-          </div>
-          <ul id="disk-list" class="list-pane" aria-label="Programs on disk"></ul>
-        </section>
-
-        <section>
-          <h2>Macros</h2>
-          <div class="button-grid">
-            <button type="button" data-sequence="hello">HELLO</button>
-            <button type="button" data-sequence="fibonacci">FIBONACCI</button>
-            <button type="button" data-command="LIST">LIST</button>
-            <button type="button" data-command="RUN">RUN</button>
-          </div>
-        </section>
 
         <section>
           <h2>Power</h2>
@@ -97,13 +70,8 @@
         <div class="crt-bezel">
           <div class="crt-screen">
             <pre id="output" class="output" aria-live="polite"></pre>
-            <div class="io-rack" aria-label="Execution inputs">
-              <label for="inputs-queue">INPUT queue (comma-separated)</label>
-              <input id="inputs-queue" type="text" placeholder="7,YES,42">
-              <label for="key-inputs">Key stream (for GET/ASC prompts)</label>
-              <input id="key-inputs" type="text" placeholder="  Y   ">
-            </div>
             <form id="command-form" class="command-bar">
+              <div id="runtime-hint" class="runtime-hint" role="status" aria-live="polite"></div>
               <label class="prompt" for="command-input">]</label>
               <textarea id="command-input" rows="2" spellcheck="false" placeholder='10 PRINT "HELLO"'></textarea>
               <button type="submit">SEND</button>

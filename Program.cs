@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using ApplesoftEmulator;
+using Microsoft.AspNetCore.SignalR;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,11 +19,13 @@ builder.Services.AddCors(options =>
     {
         policy.WithOrigins(allowedOrigins)
             .AllowAnyHeader()
-            .AllowAnyMethod();
+            .AllowAnyMethod()
+            .AllowCredentials();
     });
 });
 
 builder.Services.AddSingleton<SessionStore>();
+builder.Services.AddSignalR();
 
 var app = builder.Build();
 
@@ -36,7 +39,8 @@ app.MapGet("/", () => Results.Ok(new
         "GET /health",
         "POST /api/session",
         "POST /api/session/{sessionId}/execute",
-        "POST /api/session/{sessionId}/reset"
+        "POST /api/session/{sessionId}/reset",
+        "HUB /hubs/emulator"
     }
 }));
 
@@ -77,7 +81,20 @@ app.MapPost("/api/session/{sessionId}/execute", (string sessionId, ExecuteReques
 
         try
         {
-            ExecuteCommand(session.Interpreter, request.Command);
+            EmulatorCommandRunner.ExecuteCommand(session.Interpreter, request.Command);
+        }
+        catch (InputExhaustedException ex)
+        {
+            if (!string.IsNullOrEmpty(io.Output) && !io.Output.EndsWith('\n'))
+            {
+                io.WriteLine();
+            }
+
+            io.WriteLine(ex.KeyInputRequired
+                ? "[KEY INPUT REQUIRED. ADD CHARACTERS TO THE KEY STREAM BOX, THEN RUN AGAIN.]"
+                : "[INPUT REQUIRED. ADD VALUES TO THE INPUT QUEUE BOX, THEN RUN AGAIN.]");
+
+            return Results.Ok(new ExecuteResponse(io.Output, true));
         }
         catch (Exception ex)
         {
@@ -88,44 +105,49 @@ app.MapPost("/api/session/{sessionId}/execute", (string sessionId, ExecuteReques
     }
 });
 
+app.MapHub<ExecutionHub>("/hubs/emulator");
+
 app.Run();
 
-static void ExecuteCommand(Interpreter interpreter, string input)
+static class EmulatorCommandRunner
 {
-    var trimmedInput = input.TrimEnd();
-    if (string.IsNullOrWhiteSpace(trimmedInput))
+    public static void ExecuteCommand(Interpreter interpreter, string input)
     {
-        return;
-    }
-
-    if (trimmedInput.Equals("QUIT", StringComparison.OrdinalIgnoreCase) ||
-        trimmedInput.Equals("EXIT", StringComparison.OrdinalIgnoreCase))
-    {
-        return;
-    }
-
-    var trimmed = trimmedInput.TrimStart();
-    if (trimmed.Length > 0 && char.IsDigit(trimmed[0]))
-    {
-        int i = 0;
-        while (i < trimmed.Length && char.IsDigit(trimmed[i]))
+        var trimmedInput = input.TrimEnd();
+        if (string.IsNullOrWhiteSpace(trimmedInput))
         {
-            i++;
-        }
-
-        if (int.TryParse(trimmed[..i], out int lineNum))
-        {
-            string rest = trimmed[i..].TrimStart();
-            interpreter.StoreLine(lineNum, rest);
             return;
         }
-    }
 
-    interpreter.ExecuteDirect(trimmedInput.ToUpperInvariant() == "RUN" ? "RUN" : trimmedInput);
+        if (trimmedInput.Equals("QUIT", StringComparison.OrdinalIgnoreCase) ||
+            trimmedInput.Equals("EXIT", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var trimmed = trimmedInput.TrimStart();
+        if (trimmed.Length > 0 && char.IsDigit(trimmed[0]))
+        {
+            int i = 0;
+            while (i < trimmed.Length && char.IsDigit(trimmed[i]))
+            {
+                i++;
+            }
+
+            if (int.TryParse(trimmed[..i], out int lineNum))
+            {
+                string rest = trimmed[i..].TrimStart();
+                interpreter.StoreLine(lineNum, rest);
+                return;
+            }
+        }
+
+        interpreter.ExecuteDirect(trimmedInput.ToUpperInvariant() == "RUN" ? "RUN" : trimmedInput);
+    }
 }
 
 sealed record ExecuteRequest(string Command, string[]? Inputs, string? KeyInputs);
-sealed record ExecuteResponse(string Output);
+sealed record ExecuteResponse(string Output, bool AwaitingInput = false);
 
 sealed class SessionStore
 {
@@ -192,9 +214,14 @@ sealed class EmulatorSession
     public string DiskPath { get; }
     public object Gate { get; } = new();
     public Interpreter Interpreter { get; private set; }
+    public string? OwnerConnectionId { get; set; }
+    public Task? ActiveExecution { get; set; }
+    public StreamingRuntimeIO? StreamingIO { get; set; }
 
     public void Reset()
     {
+        StreamingIO = null;
+        ActiveExecution = null;
         Interpreter = new Interpreter(new BufferedRuntimeIO(), DiskPath);
     }
 }

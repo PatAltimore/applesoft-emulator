@@ -2,6 +2,17 @@ using System.Text;
 
 namespace ApplesoftEmulator;
 
+public sealed class InputExhaustedException : Exception
+{
+    public InputExhaustedException(bool keyInputRequired)
+        : base(keyInputRequired ? "key input required" : "line input required")
+    {
+        KeyInputRequired = keyInputRequired;
+    }
+
+    public bool KeyInputRequired { get; }
+}
+
 public interface IRuntimeIO
 {
     int CursorLeft { get; set; }
@@ -96,7 +107,7 @@ public sealed class BufferedRuntimeIO : IRuntimeIO
     {
         if (_lineInputs.Count == 0)
         {
-            return string.Empty;
+            throw new InputExhaustedException(false);
         }
 
         return _lineInputs.Dequeue();
@@ -104,7 +115,12 @@ public sealed class BufferedRuntimeIO : IRuntimeIO
 
     public ConsoleKeyInfo ReadKey(bool intercept)
     {
-        var ch = _charInputs.Count > 0 ? _charInputs.Dequeue() : '\n';
+        if (_charInputs.Count == 0)
+        {
+            throw new InputExhaustedException(true);
+        }
+
+        var ch = _charInputs.Dequeue();
         return new ConsoleKeyInfo(ch, ConsoleKey.NoName, false, false, false);
     }
 
@@ -119,5 +135,171 @@ public sealed class BufferedRuntimeIO : IRuntimeIO
         _output.Clear();
         CursorLeft = 0;
         CursorTop = 0;
+    }
+}
+
+public sealed class StreamingRuntimeIO : IRuntimeIO
+{
+    private readonly Action<string> _onOutput;
+    private readonly Action<string, bool> _onInputRequested;
+    private readonly TimeSpan _inputTimeout;
+    private readonly object _sync = new();
+    private TaskCompletionSource<string>? _pendingLineInput;
+    private TaskCompletionSource<char>? _pendingCharInput;
+    private readonly StringBuilder _output = new();
+
+    public StreamingRuntimeIO(Action<string> onOutput, Action<string, bool> onInputRequested, TimeSpan? inputTimeout = null)
+    {
+        _onOutput = onOutput;
+        _onInputRequested = onInputRequested;
+        _inputTimeout = inputTimeout ?? TimeSpan.FromMinutes(5);
+    }
+
+    public int CursorLeft { get; set; }
+    public int CursorTop { get; set; }
+    public int BufferWidth => 120;
+    public int BufferHeight => 60;
+    public Encoding OutputEncoding { get; set; } = Encoding.UTF8;
+    public string Output => _output.ToString();
+
+    public void Write(string value)
+    {
+        _output.Append(value);
+
+        for (int i = 0; i < value.Length; i++)
+        {
+            if (value[i] == '\n')
+            {
+                CursorLeft = 0;
+                CursorTop++;
+            }
+            else if (value[i] != '\r')
+            {
+                CursorLeft++;
+            }
+        }
+
+        _onOutput(value);
+    }
+
+    public void WriteLine(string value = "")
+    {
+        Write(value);
+        Write("\n");
+    }
+
+    public string? ReadLine()
+    {
+        var tcs = CreatePendingLineInput();
+        _onInputRequested("? ", false);
+
+        if (!tcs.Task.Wait(_inputTimeout))
+        {
+            ClearPendingInput(tcs);
+            throw new TimeoutException("Timed out waiting for line input.");
+        }
+
+        return tcs.Task.Result;
+    }
+
+    public ConsoleKeyInfo ReadKey(bool intercept)
+    {
+        var tcs = CreatePendingKeyInput();
+        _onInputRequested("", true);
+
+        if (!tcs.Task.Wait(_inputTimeout))
+        {
+            ClearPendingInput(tcs);
+            throw new TimeoutException("Timed out waiting for key input.");
+        }
+
+        var ch = tcs.Task.Result;
+        return new ConsoleKeyInfo(ch, ConsoleKey.NoName, false, false, false);
+    }
+
+    public bool TrySubmitInput(string input)
+    {
+        lock (_sync)
+        {
+            if (_pendingCharInput is not null)
+            {
+                var ch = string.IsNullOrEmpty(input) ? '\n' : input[0];
+                var pending = _pendingCharInput;
+                _pendingCharInput = null;
+                return pending.TrySetResult(ch);
+            }
+
+            if (_pendingLineInput is not null)
+            {
+                var pending = _pendingLineInput;
+                _pendingLineInput = null;
+                return pending.TrySetResult(input ?? string.Empty);
+            }
+        }
+
+        return false;
+    }
+
+    public void SetCursorPosition(int left, int top)
+    {
+        CursorLeft = Math.Max(0, left);
+        CursorTop = Math.Max(0, top);
+    }
+
+    public void Clear()
+    {
+        _output.Clear();
+        CursorLeft = 0;
+        CursorTop = 0;
+    }
+
+    private TaskCompletionSource<string> CreatePendingLineInput()
+    {
+        lock (_sync)
+        {
+            if (_pendingLineInput is not null || _pendingCharInput is not null)
+            {
+                throw new InvalidOperationException("Already waiting for input.");
+            }
+
+            _pendingLineInput = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            return _pendingLineInput;
+        }
+    }
+
+    private TaskCompletionSource<char> CreatePendingKeyInput()
+    {
+        lock (_sync)
+        {
+            if (_pendingLineInput is not null || _pendingCharInput is not null)
+            {
+                throw new InvalidOperationException("Already waiting for input.");
+            }
+
+            _pendingCharInput = new TaskCompletionSource<char>(TaskCreationOptions.RunContinuationsAsynchronously);
+            return _pendingCharInput;
+        }
+    }
+
+    private void ClearPendingInput(TaskCompletionSource<string> expected)
+    {
+        lock (_sync)
+        {
+            if (ReferenceEquals(_pendingLineInput, expected))
+            {
+                _pendingLineInput = null;
+            }
+        }
+    }
+
+    private void ClearPendingInput(TaskCompletionSource<char> expected)
+    {
+        lock (_sync)
+        {
+            if (ReferenceEquals(_pendingCharInput, expected))
+            {
+                _pendingCharInput = null;
+            }
+        }
     }
 }

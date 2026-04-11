@@ -260,6 +260,10 @@ public void Run(int startLine = -1)
         {
             _io.WriteLine(ex.Message);
         }
+        catch (InputExhaustedException)
+        {
+            throw;
+        }
         catch (BasicException ex)
         {
             _io.WriteLine($"{ex.Message} IN {_currentLineNumber}");
@@ -270,6 +274,7 @@ public void Run(int startLine = -1)
         }
         finally
         {
+            _running = false;
             FlushSpeaker(); // play any remaining sound after program ends
         }
     }
@@ -295,6 +300,10 @@ public void ExecuteDirect(string line)
                 if (!_jumped) break;
                 // A jump (e.g. GOTO/RUN) was issued — continue from the new position.
             }
+        }
+        catch (InputExhaustedException)
+        {
+            throw;
         }
         catch (BasicException ex)
         {

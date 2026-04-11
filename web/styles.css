@@ -159,6 +159,15 @@ h2 {
   gap: 0.6rem;
 }
 
+.button-grid.mini {
+  margin-top: 0.25rem;
+}
+
+.button-grid.mini button {
+  padding: 0.55rem 0.5rem;
+  font-size: 0.55rem;
+}
+
 .list-pane {
   list-style: none;
   margin: 0.75rem 0 0;
@@ -222,6 +231,8 @@ button:focus-visible {
 .crt-screen {
   position: relative;
   min-height: 70vh;
+  display: grid;
+  grid-template-rows: 1fr auto auto;
   background:
     radial-gradient(circle at center, rgba(145, 255, 102, 0.08), transparent 55%),
     linear-gradient(180deg, rgba(145, 255, 102, 0.02), rgba(0, 0, 0, 0.1)),
@@ -230,7 +241,6 @@ button:focus-visible {
   border: 3px solid #394422;
   padding: 1rem;
   box-shadow: inset 0 0 40px var(--screen-glow), inset 0 0 0 1px rgba(145, 255, 102, 0.08);
-  overflow: hidden;
 }
 
 .crt-screen::before {
@@ -248,41 +258,57 @@ button:focus-visible {
   position: relative;
   z-index: 1;
   margin: 0;
-  min-height: calc(70vh - 11rem);
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 55vh;
   white-space: pre-wrap;
   word-break: break-word;
   font-size: clamp(1.35rem, 2vw, 1.7rem);
   line-height: 1.05;
   text-shadow: 0 0 8px rgba(145, 255, 102, 0.3);
+  padding-right: 0.5rem;
 }
 
-.io-rack {
-  position: relative;
-  z-index: 1;
-  margin-top: 0.75rem;
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.35rem;
+.output::-webkit-scrollbar {
+  width: 12px;
 }
 
-.io-rack label {
-  color: rgba(255, 231, 155, 0.92);
-  font-size: 1.05rem;
+.output::-webkit-scrollbar-track {
+  background: rgba(8, 12, 4, 0.5);
 }
 
-.io-rack input {
-  width: 100%;
+.output::-webkit-scrollbar-thumb {
+  background: rgba(145, 255, 102, 0.4);
+  border-radius: 6px;
+}
+
+.output::-webkit-scrollbar-thumb:hover {
+  background: rgba(145, 255, 102, 0.6);
+}
+
+.runtime-hint {
+  display: none;
   border: 2px solid #51632e;
-  background: rgba(8, 12, 4, 0.92);
-  color: var(--phosphor);
-  font: inherit;
-  font-size: 1.25rem;
-  padding: 0.35rem 0.55rem;
+  background: rgba(8, 12, 4, 0.9);
+  color: #d7ff79;
+  font-size: 1rem;
+  padding: 0.4rem 0.55rem;
+  margin-bottom: 0.5rem;
+  grid-column: 1 / -1;
 }
 
-.io-rack input:focus {
-  outline: 2px solid #ffe79b;
-  outline-offset: 1px;
+.runtime-hint.active {
+  display: block;
+}
+
+.runtime-hint.warning {
+  border-color: #ffb347;
+  color: #ffe7b1;
+}
+
+.runtime-hint.key {
+  border-color: #7db3ff;
+  color: #d4e5ff;
 }
 
 .command-bar {

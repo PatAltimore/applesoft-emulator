@@ -10,31 +10,18 @@ const apiBaseUrlEl = document.getElementById('api-base-url');
 const newSessionButton = document.getElementById('new-session');
 const resetSessionButton = document.getElementById('reset-session');
 const clearScreenButton = document.getElementById('clear-screen');
-const scanDiskButton = document.getElementById('scan-disk');
-const loadSelectedButton = document.getElementById('load-selected');
-const runSelectedButton = document.getElementById('run-selected');
-const diskListEl = document.getElementById('disk-list');
 const clearHistoryButton = document.getElementById('clear-history');
 const historyListEl = document.getElementById('history-list');
-const inputsQueueEl = document.getElementById('inputs-queue');
-const keyInputsEl = document.getElementById('key-inputs');
-
-const sequences = {
-  hello: ['10 PRINT "HELLO, WORLD!"', 'RUN'],
-  fibonacci: ['LOAD "FIBONACCI"', 'RUN'],
-  catalog: ['CATALOG'],
-  lemonade: ['LOAD "LEMONADE"', 'RUN'],
-  adventure: ['LOAD "ADVENTURE"', 'RUN'],
-  guess: ['LOAD "GUESS"', 'RUN']
-};
+const runtimeHintEl = document.getElementById('runtime-hint');
 
 let sessionId = null;
+let currentPromptIsKeyInput = false;
 const historyStorageKey = 'applesoft-history';
-const diskFallback = ['ADVENTURE', 'FIBONACCI', 'GUESS', 'LEMONADE', 'LORES', 'MULTIPLICATION', 'WUMPUS'];
 const commandHistory = JSON.parse(localStorage.getItem(historyStorageKey) ?? '[]');
 let historyCursor = commandHistory.length;
-let diskPrograms = [];
-let selectedProgram = null;
+
+let hubConnection = null;
+let hubReady = false;
 
 apiBaseUrlEl.textContent = apiBaseUrl;
 
@@ -43,13 +30,45 @@ function appendOutput(text = '') {
   outputEl.scrollTop = outputEl.scrollHeight;
 }
 
+function appendOutputChunk(text = '') {
+  outputEl.textContent += normalizeOutputForDisplay(text);
+  outputEl.scrollTop = outputEl.scrollHeight;
+}
+
+function normalizeOutputForDisplay(text = '') {
+  if (!text) {
+    return '';
+  }
+
+  let normalized = text.replace(/\r/g, '');
+  normalized = normalized.replace(/^[ \t]{200,}/, '');
+  normalized = normalized.replace(/\n[ \t]{200,}/g, '\n');
+  return normalized;
+}
+
 function replaceOutput(text) {
   outputEl.textContent = `${text}\n`;
+}
+
+function clearRuntimeHint() {
+  runtimeHintEl.textContent = '';
+  runtimeHintEl.className = 'runtime-hint';
+}
+
+function setRuntimeHint(message, kind) {
+  runtimeHintEl.textContent = message;
+  runtimeHintEl.className = `runtime-hint active ${kind}`;
 }
 
 function setSession(id) {
   sessionId = id;
   sessionIdEl.textContent = id ?? 'OFFLINE';
+
+  if (hubReady && sessionId) {
+    hubConnection.invoke('AttachSession', sessionId).catch(error => {
+      appendOutput(`?HUB ATTACH ERROR: ${error.message}`);
+    });
+  }
 }
 
 function persistHistory() {
@@ -81,46 +100,6 @@ function renderHistory() {
   });
 }
 
-function setDiskSelection(name) {
-  selectedProgram = name;
-  renderDiskPrograms();
-}
-
-function renderDiskPrograms() {
-  diskListEl.innerHTML = '';
-
-  if (diskPrograms.length === 0) {
-    const empty = document.createElement('li');
-    empty.className = 'empty';
-    empty.textContent = 'Scan disk to discover programs.';
-    diskListEl.appendChild(empty);
-    return;
-  }
-
-  diskPrograms.forEach(name => {
-    const li = document.createElement('li');
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = name;
-    button.className = name === selectedProgram ? 'active' : '';
-    button.addEventListener('click', () => setDiskSelection(name));
-    li.appendChild(button);
-    diskListEl.appendChild(li);
-  });
-}
-
-function parseCatalogOutput(output) {
-  const stopWords = new Set([
-    'CATALOG', 'DISK', 'FREE', 'BLOCKS', 'BYTES', 'READY', 'ERROR', 'PRESS', 'SPACE', 'TO', 'CONTINUE', 'ESC', 'END'
-  ]);
-
-  const names = [...output.toUpperCase().matchAll(/\b([A-Z][A-Z0-9_]{1,24})(?:\.BAS)?\b/g)]
-    .map(match => match[1])
-    .filter(name => !stopWords.has(name));
-
-  return [...new Set(names)].sort((a, b) => a.localeCompare(b));
-}
-
 function rememberCommand(command) {
   const trimmed = command.trim();
   if (!trimmed) {
@@ -134,19 +113,6 @@ function rememberCommand(command) {
   }
 
   historyCursor = commandHistory.length;
-}
-
-function buildRuntimeInputs() {
-  const inputsRaw = inputsQueueEl.value.trim();
-  const keyRaw = keyInputsEl.value;
-
-  const inputs = inputsRaw.length === 0
-    ? undefined
-    : inputsRaw.split(',').map(item => item.trim()).filter(item => item.length > 0);
-
-  const keyInputs = keyRaw.length === 0 ? undefined : keyRaw;
-
-  return { inputs, keyInputs };
 }
 
 async function apiRequest(path, options = {}) {
@@ -169,6 +135,64 @@ async function apiRequest(path, options = {}) {
   return response.json();
 }
 
+async function initializeHub() {
+  if (!window.signalR) {
+    appendOutput('?SIGNALR CLIENT NOT AVAILABLE. USING LEGACY MODE.');
+    return;
+  }
+
+  hubConnection = new window.signalR.HubConnectionBuilder()
+    .withUrl(`${apiBaseUrl}/hubs/emulator`)
+    .withAutomaticReconnect()
+    .build();
+
+  hubConnection.on('ReceiveOutput', text => {
+    appendOutputChunk(text);
+  });
+
+  hubConnection.on('InputRequested', request => {
+    currentPromptIsKeyInput = !!request?.isKeyInput;
+    const hint = currentPromptIsKeyInput 
+      ? 'Program is waiting for a key. Enter a single character.' 
+      : 'Program is waiting for input. Type your answer and press SEND.';
+    const kind = currentPromptIsKeyInput ? 'key' : 'warning';
+    setRuntimeHint(hint, kind);
+    commandInput.focus();
+  });
+
+  hubConnection.on('ExecutionError', message => {
+    appendOutput(`?ERROR: ${message}`);
+    clearRuntimeHint();
+  });
+
+  hubConnection.on('ExecutionComplete', () => {
+    currentPromptIsKeyInput = false;
+    clearRuntimeHint();
+  });
+
+  hubConnection.onreconnecting(() => {
+    hubReady = false;
+    setRuntimeHint('Reconnecting live terminal...', 'warning');
+  });
+
+  hubConnection.onreconnected(async () => {
+    hubReady = true;
+    if (sessionId) {
+      await hubConnection.invoke('AttachSession', sessionId);
+    }
+    setRuntimeHint('Live terminal reconnected.', 'key');
+  });
+
+  try {
+    await hubConnection.start();
+    hubReady = true;
+    clearRuntimeHint();
+  } catch (error) {
+    hubReady = false;
+    appendOutput(`?HUB OFFLINE: ${error.message}`);
+  }
+}
+
 async function checkHealth() {
   try {
     const health = await apiRequest('/health', { method: 'GET' });
@@ -183,7 +207,9 @@ async function createSession() {
   const data = await apiRequest('/api/session', { method: 'POST', body: '{}' });
   setSession(data.sessionId);
   appendOutput(`NEW SESSION: ${data.sessionId}`);
-  appendOutput('READY. TYPE BASIC OR USE THE DISK BUTTONS.');
+  appendOutput(hubReady
+    ? 'READY. LIVE INTERACTIVE MODE ENABLED.'
+    : 'READY. TYPE BASIC OR USE THE DISK BUTTONS.');
 }
 
 async function resetSession() {
@@ -194,57 +220,43 @@ async function resetSession() {
 
   await apiRequest(`/api/session/${sessionId}/reset`, { method: 'POST', body: '{}' });
   appendOutput('SESSION RESET. MEMORY CLEARED.');
-  diskPrograms = [];
-  selectedProgram = null;
-  renderDiskPrograms();
+  currentPromptIsKeyInput = false;
+  clearRuntimeHint();
+
+  if (hubReady) {
+    await hubConnection.invoke('AttachSession', sessionId);
+  }
 }
 
 async function executeCommand(command) {
   if (!command.trim()) {
-    return '';
+    return;
   }
 
   if (!sessionId) {
     await createSession();
   }
 
+  // Check if we're waiting for input
+  if (runtimeHintEl.classList.contains('active')) {
+    // Submit as input instead of a command
+    if (hubReady) {
+      await hubConnection.invoke('SubmitInput', sessionId, command);
+    }
+    return;
+  }
+
   appendOutput(`]${command}`);
   rememberCommand(command);
 
-  const runtime = buildRuntimeInputs();
-  const payload = JSON.stringify({
-    command,
-    inputs: runtime.inputs,
-    keyInputs: runtime.keyInputs
-  });
-  const data = await apiRequest(`/api/session/${sessionId}/execute`, {
-    method: 'POST',
-    body: payload
-  });
-
-  if (runtime.inputs && runtime.inputs.length > 0) {
-    inputsQueueEl.value = '';
-  }
-
-  if (data?.output) {
-    const cleanOutput = data.output.replace(/\n$/, '');
-    appendOutput(cleanOutput);
-    return cleanOutput;
-  }
-
-  return '';
-}
-
-async function runSequence(name) {
-  const commands = sequences[name] ?? [];
-  for (const command of commands) {
-    await executeCommand(command);
+  if (hubReady) {
+    await hubConnection.invoke('StartExecution', sessionId, command);
+    return;
   }
 }
 
 commandForm.addEventListener('submit', async event => {
   event.preventDefault();
-
   const command = commandInput.value;
   commandInput.value = '';
 
@@ -255,7 +267,7 @@ commandForm.addEventListener('submit', async event => {
   }
 });
 
-commandInput.addEventListener('keydown', async event => {
+commandInput.addEventListener('keydown', event => {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault();
     commandForm.requestSubmit();
@@ -299,51 +311,7 @@ resetSessionButton.addEventListener('click', async () => {
 
 clearScreenButton.addEventListener('click', () => {
   replaceOutput('APPLE ][ ONLINE\nREMOTE BASIC SUBSYSTEM\n');
-});
-
-async function scanDisk() {
-  let catalogOutput = '';
-  try {
-    catalogOutput = await executeCommand('CATALOG');
-  } catch (error) {
-    appendOutput(`?ERROR: ${error.message}`);
-  }
-
-  const parsed = parseCatalogOutput(catalogOutput);
-  diskPrograms = parsed.length > 0 ? parsed : [...diskFallback];
-  selectedProgram = diskPrograms[0] ?? null;
-  renderDiskPrograms();
-}
-
-scanDiskButton.addEventListener('click', async () => {
-  await scanDisk();
-});
-
-loadSelectedButton.addEventListener('click', async () => {
-  if (!selectedProgram) {
-    appendOutput('?NO PROGRAM SELECTED');
-    return;
-  }
-
-  try {
-    await executeCommand(`LOAD "${selectedProgram}"`);
-  } catch (error) {
-    appendOutput(`?ERROR: ${error.message}`);
-  }
-});
-
-runSelectedButton.addEventListener('click', async () => {
-  if (!selectedProgram) {
-    appendOutput('?NO PROGRAM SELECTED');
-    return;
-  }
-
-  try {
-    await executeCommand(`LOAD "${selectedProgram}"`);
-    await executeCommand('RUN');
-  } catch (error) {
-    appendOutput(`?ERROR: ${error.message}`);
-  }
+  clearRuntimeHint();
 });
 
 clearHistoryButton.addEventListener('click', () => {
@@ -354,29 +322,11 @@ clearHistoryButton.addEventListener('click', () => {
   appendOutput('COMMAND HISTORY CLEARED.');
 });
 
-document.querySelectorAll('[data-command]').forEach(button => {
-  button.addEventListener('click', async () => {
-    try {
-      await executeCommand(button.dataset.command ?? '');
-    } catch (error) {
-      appendOutput(`?ERROR: ${error.message}`);
-    }
-  });
-});
-
-document.querySelectorAll('[data-sequence]').forEach(button => {
-  button.addEventListener('click', async () => {
-    try {
-      await runSequence(button.dataset.sequence ?? '');
-    } catch (error) {
-      appendOutput(`?ERROR: ${error.message}`);
-    }
-  });
-});
-
 replaceOutput('APPLE ][ ONLINE\nBOOTING REMOTE BASIC SUBSYSTEM...\n');
 renderHistory();
-renderDiskPrograms();
-checkHealth().then(createSession).catch(error => {
-  appendOutput(`?ERROR: ${error.message}`);
-});
+
+Promise.all([checkHealth(), initializeHub()])
+  .then(createSession)
+  .catch(error => {
+    appendOutput(`?ERROR: ${error.message}`);
+  });
