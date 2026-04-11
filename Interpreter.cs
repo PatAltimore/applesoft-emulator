@@ -49,6 +49,7 @@ public List<Token> BodyTokens { get; set; } = new();
 // The main Applesoft BASIC interpreter.
 public class Interpreter
 {
+private IRuntimeIO _io;
 // Stores the program lines, keyed by line number.
 private readonly SortedDictionary<int, string> _program = new();
 // Stores scalar variables by name.
@@ -139,8 +140,7 @@ private static readonly (int R, int G, int B)[] LoResColors =
 };
 
 // Path to the Disk folder used for SAVE, LOAD, and CATALOG.
-// Resolves the Disk folder from the base directory or the current working directory.
-private static readonly string DiskPath = ResolveDiskPath();
+private readonly string _diskPath;
 
 // Finds the disk folder, checking the current working directory first, then the application base directory.
 // This ensures SAVE writes to the project's disk folder (visible in the source tree) when running via dotnet run.
@@ -161,24 +161,33 @@ private static string ResolveDiskPath()
 // Resolves a filename within the Disk folder using case-insensitive matching.
 // On case-sensitive filesystems (Linux), finds the actual file regardless of casing.
 // Returns the full path if found, or the original-cased path if not.
-private static string ResolveFilePath(string fileName)
+private string ResolveFilePath(string fileName)
 {
-    string path = Path.Combine(DiskPath, fileName);
+    string path = Path.Combine(_diskPath, fileName);
     // If exact match exists or directory doesn't exist, return as-is
-    if (File.Exists(path) || !Directory.Exists(DiskPath))
+    if (File.Exists(path) || !Directory.Exists(_diskPath))
         return path;
 
     // Case-insensitive search for the file on Linux
-    var match = Directory.GetFiles(DiskPath)
+    var match = Directory.GetFiles(_diskPath)
         .FirstOrDefault(f => string.Equals(Path.GetFileName(f), fileName, StringComparison.OrdinalIgnoreCase));
     return match ?? path;
 }
 
 // Initializes a new instance of the Interpreter class.
-public Interpreter()
+public Interpreter(IRuntimeIO? io = null, string? diskPath = null)
     {
+        _io = io ?? new ConsoleRuntimeIO();
+        _diskPath = string.IsNullOrWhiteSpace(diskPath) ? ResolveDiskPath() : diskPath;
         _evaluator = new ExpressionEvaluator(this);
     }
+
+public void SetRuntimeIO(IRuntimeIO io)
+    {
+        _io = io;
+    }
+
+public int GetCursorLeft() => _io.CursorLeft;
 
     #region Public API
 
@@ -219,7 +228,7 @@ public void Run(int startLine = -1)
                 _programIndex = _lineNumbers.FindIndex(n => n >= startLine);
                 if (_programIndex < 0)
                 {
-                    Console.WriteLine("?UNDEF'D STATEMENT ERROR");
+                    _io.WriteLine("?UNDEF'D STATEMENT ERROR");
                     return;
                 }
             }
@@ -249,15 +258,15 @@ public void Run(int startLine = -1)
         }
         catch (StopException ex)
         {
-            Console.WriteLine(ex.Message);
+            _io.WriteLine(ex.Message);
         }
         catch (BasicException ex)
         {
-            Console.WriteLine($"{ex.Message} IN {_currentLineNumber}");
+            _io.WriteLine($"{ex.Message} IN {_currentLineNumber}");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"?ERROR: {ex.Message} IN {_currentLineNumber}");
+            _io.WriteLine($"?ERROR: {ex.Message} IN {_currentLineNumber}");
         }
         finally
         {
@@ -289,7 +298,7 @@ public void ExecuteDirect(string line)
         }
         catch (BasicException ex)
         {
-            Console.WriteLine(ex.Message);
+            _io.WriteLine(ex.Message);
         }
         finally
         {
@@ -305,7 +314,7 @@ public void ListProgram(int startLine = 0, int endLine = int.MaxValue)
         foreach (var kvp in _program)
         {
             if (kvp.Key >= startLine && kvp.Key <= endLine)
-                Console.WriteLine($"{kvp.Key}  {kvp.Value}");
+                _io.WriteLine($"{kvp.Key}  {kvp.Value}");
         }
     }
 
@@ -328,7 +337,7 @@ public void NewProgram()
 // name: The program name (with or without .bas extension).
 public void SaveProgram(string name)
     {
-        Directory.CreateDirectory(DiskPath); // create Disk folder if it doesn't exist
+        Directory.CreateDirectory(_diskPath); // create Disk folder if it doesn't exist
         if (!name.EndsWith(".bas", StringComparison.OrdinalIgnoreCase))
             name += ".bas";
         string path = ResolveFilePath(name);
@@ -348,7 +357,7 @@ public void LoadProgram(string name)
         string path = ResolveFilePath(name);
         if (!File.Exists(path))
         {
-            Console.WriteLine("FILE NOT FOUND");
+            _io.WriteLine("FILE NOT FOUND");
             return;
         }
         NewProgram(); // clear existing program before loading
@@ -371,20 +380,20 @@ public void LoadProgram(string name)
 // and filename is up to 30 characters (the DOS 3.3 maximum).
 public void CatalogDisk()
     {
-        if (!Directory.Exists(DiskPath))
+        if (!Directory.Exists(_diskPath))
         {
-            Console.WriteLine();
-            Console.WriteLine("DISK VOLUME 254");
-            Console.WriteLine();
+            _io.WriteLine();
+            _io.WriteLine("DISK VOLUME 254");
+            _io.WriteLine();
             return;
         }
         // Collect and sort program files alphabetically
-        var files = Directory.GetFiles(DiskPath, "*.bas")
+        var files = Directory.GetFiles(_diskPath, "*.bas")
                              .OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase)
                              .ToList();
-        Console.WriteLine();
-        Console.WriteLine("DISK VOLUME 254");
-        Console.WriteLine();
+        _io.WriteLine();
+        _io.WriteLine("DISK VOLUME 254");
+        _io.WriteLine();
         foreach (var filePath in files)
         {
             var fileInfo = new FileInfo(filePath);
@@ -396,9 +405,9 @@ public void CatalogDisk()
             // DOS 3.3 filenames are max 30 characters
             if (name.Length > 30) name = name[..30];
             // Format: " A NNN FILENAME" (space = unlocked, A = Applesoft BASIC)
-            Console.WriteLine($" A {totalSectors:D3} {name}");
+            _io.WriteLine($" A {totalSectors:D3} {name}");
         }
-        Console.WriteLine();
+        _io.WriteLine();
     }
 
 // Deletes program lines between the specified start and end line numbers.
@@ -624,8 +633,8 @@ private void ExecuteStatement()
                 {
                     int winW = Math.Max(0, _winRight - _winLeft);
                     for (int r = _winTop; r <= _winBottom; r++)
-                        try { Console.SetCursorPosition(_winLeft, r); Console.Write(new string(' ', winW)); } catch { }
-                    try { Console.SetCursorPosition(_winLeft, _winTop); } catch { }
+                        try { _io.SetCursorPosition(_winLeft, r); _io.Write(new string(' ', winW)); } catch { }
+                    try { _io.SetCursorPosition(_winLeft, _winTop); } catch { }
                 }
                 _tokenPos++;
                 break;
@@ -675,9 +684,9 @@ private void ExecutePrint()
             {
                 _tokenPos++;
                 // Tab to next 16-column zone
-                int col = Console.CursorLeft;
+                int col = _io.CursorLeft;
                 int nextTab = ((col / 16) + 1) * 16;
-                Console.Write(new string(' ', nextTab - col));
+                _io.Write(new string(' ', nextTab - col));
                 needNewline = false;
                 continue;
             }
@@ -687,9 +696,9 @@ private void ExecutePrint()
             _tokenPos = _evaluator.Position;
 
             if (val.IsString)
-                Console.Write(val.StringValue);
+                _io.Write(val.StringValue);
             else
-                Console.Write(BasicValue.FormatNumber(val.NumberValue));
+                _io.Write(BasicValue.FormatNumber(val.NumberValue));
 
             needNewline = true;
         }
@@ -701,10 +710,10 @@ private void ExecutePrint()
 // Moves cursor to the next line within the text window, scrolling the window up if needed.
 private void PrintNewline()
 {
-    int nextRow = Console.CursorTop + 1;
+    int nextRow = _io.CursorTop + 1;
     if (nextRow <= _winBottom)
     {
-        try { Console.SetCursorPosition(_winLeft, nextRow); } catch { Console.WriteLine(); }
+        try { _io.SetCursorPosition(_winLeft, nextRow); } catch { _io.WriteLine(); }
     }
     else
     {
@@ -715,25 +724,25 @@ private void PrintNewline()
             // Read line below and copy it up — not directly possible via Console,
             // so emit a real newline only when the cursor is at the bottom of the
             // *full* terminal (which causes the OS to scroll); otherwise just reposition.
-            try { Console.SetCursorPosition(_winLeft, r + 1); } catch { }
+            try { _io.SetCursorPosition(_winLeft, r + 1); } catch { }
             // Can't read console content portably, so fall back to a real newline
             // only when the window spans the full terminal width.
         }
-        if (_winLeft == 0 && _winRight >= Console.WindowWidth)
+        if (_winLeft == 0 && _winRight >= _io.BufferWidth)
         {
             // Full-width window — let the terminal scroll naturally.
-            Console.WriteLine();
+            _io.WriteLine();
         }
         else
         {
             // Narrow window: clear the bottom row and stay there.
             try
             {
-                Console.SetCursorPosition(_winLeft, _winBottom);
-                Console.Write(new string(' ', winW));
-                Console.SetCursorPosition(_winLeft, _winBottom);
+                _io.SetCursorPosition(_winLeft, _winBottom);
+                _io.Write(new string(' ', winW));
+                _io.SetCursorPosition(_winLeft, _winBottom);
             }
-            catch { Console.WriteLine(); }
+            catch { _io.WriteLine(); }
         }
     }
 }
@@ -749,7 +758,7 @@ private void ExecuteGet()
         FlushSpeaker(); // play any queued sound before blocking for input
 
         // Read a single key without displaying it
-        var key = Console.ReadKey(true);
+        var key = _io.ReadKey(true);
         string ch = key.KeyChar == '\r' || key.KeyChar == '\n' ? "\r" : key.KeyChar.ToString();
 
         if (varName.EndsWith('$'))
@@ -800,8 +809,8 @@ private void ExecuteInput()
         bool done = false;
         while (!done)
         {
-            Console.Write(prompt);
-            string? input = Console.ReadLine() ?? "";
+            _io.Write(prompt);
+            string? input = _io.ReadLine() ?? "";
             string[] parts = input.Split(',');
 
             if (parts.Length < targets.Count)
@@ -812,8 +821,8 @@ private void ExecuteInput()
 
                 if (parts.Length < targets.Count)
                 {
-                    Console.Write("?? ");
-                    string? more = Console.ReadLine() ?? "";
+                    _io.Write("?? ");
+                    string? more = _io.ReadLine() ?? "";
                     var remaining = more.Split(',');
                     for (int i = 0; i < Math.Min(remaining.Length, targets.Count - parts.Length); i++)
                         AssignInputValue(targets[parts.Length + i], remaining[i].Trim());
@@ -1320,7 +1329,7 @@ private void ExecuteHtab()
         _evaluator.Init(_currentTokens, _tokenPos);
         int col = (int)_evaluator.Evaluate().NumberValue;
         _tokenPos = _evaluator.Position;
-        try { Console.CursorLeft = Math.Clamp(col - 1, 0, Console.BufferWidth - 1); } catch { }
+        try { _io.CursorLeft = Math.Clamp(col - 1, 0, _io.BufferWidth - 1); } catch { }
     }
 
 // Executes the VTAB statement, setting the vertical cursor position.
@@ -1330,7 +1339,7 @@ private void ExecuteVtab()
         _evaluator.Init(_currentTokens, _tokenPos);
         int row = (int)_evaluator.Evaluate().NumberValue;
         _tokenPos = _evaluator.Position;
-        try { Console.CursorTop = Math.Clamp(row - 1, 0, Console.BufferHeight - 1); } catch { }
+        try { _io.CursorTop = Math.Clamp(row - 1, 0, _io.BufferHeight - 1); } catch { }
     }
 
 // Executes the POKE statement, writing a value to memory.
@@ -1486,7 +1495,7 @@ private void ExecuteLoadCmd()
 // and 24-bit ANSI color. termRow 0 covers LORES rows 0-1, termRow 1 covers rows 2-3, etc.
 private void RenderLoResRow(int termRow)
 {
-    try { Console.SetCursorPosition(0, termRow); } catch { return; }
+    try { _io.SetCursorPosition(0, termRow); } catch { return; }
     var sb = new System.Text.StringBuilder(40 * 40);
     for (int x = 0; x < 40; x++)
     {
@@ -1498,7 +1507,7 @@ private void RenderLoResRow(int termRow)
         sb.Append($"\x1b[38;2;{bot.R};{bot.G};{bot.B}m\x1b[48;2;{top.R};{top.G};{top.B}m\u2584");
     }
     sb.Append("\x1b[0m");
-    Console.Write(sb.ToString());
+    _io.Write(sb.ToString());
 }
 
 // Sets one LORES pixel and immediately redraws the affected terminal row.
@@ -1506,9 +1515,9 @@ private void PlotPixel(int x, int y, int color)
 {
     if (x < 0 || x >= 40 || y < 0 || y >= 40) return;
     _loRes[x, y] = (byte)(color & 0xF);
-    int savedLeft = Console.CursorLeft, savedTop = Console.CursorTop;
+    int savedLeft = _io.CursorLeft, savedTop = _io.CursorTop;
     RenderLoResRow(y / 2);
-    try { Console.SetCursorPosition(savedLeft, savedTop); } catch { }
+    try { _io.SetCursorPosition(savedLeft, savedTop); } catch { }
 }
 
 // Executes the GR statement: switch to LORES graphics mode.
@@ -1522,11 +1531,11 @@ private void ExecuteGr()
     _loResColor = 0;
     // GR sets the text window to rows 20-23 (4-line mixed area at the bottom).
     _winLeft = 0; _winRight = 40; _winTop = 20; _winBottom = 23;
-    Console.OutputEncoding = System.Text.Encoding.UTF8;
-    Console.Clear();
+    _io.OutputEncoding = System.Text.Encoding.UTF8;
+    _io.Clear();
     for (int row = 0; row < 20; row++)
         RenderLoResRow(row);
-    try { Console.SetCursorPosition(0, 20); } catch { }
+    try { _io.SetCursorPosition(0, 20); } catch { }
 }
 
 // Executes the TEXT statement: return to full text mode.
@@ -1536,7 +1545,7 @@ private void ExecuteText()
     _graphicsMode = false;
     // Restore full-screen text window.
     _winLeft = 0; _winRight = 40; _winTop = 0; _winBottom = 23;
-    Console.Clear();
+    _io.Clear();
 }
 
 // Executes the COLOR= statement: set the current drawing color (0-15).
@@ -1596,12 +1605,12 @@ private void ExecuteHlin()
     _tokenPos = _evaluator.Position;
 
     if (y < 0 || y >= 40) return;
-    int savedLeft = Console.CursorLeft, savedTop = Console.CursorTop;
+    int savedLeft = _io.CursorLeft, savedTop = _io.CursorTop;
     for (int x = Math.Min(x1, x2); x <= Math.Max(x1, x2); x++)
         if (x >= 0 && x < 40)
             _loRes[x, y] = (byte)(_loResColor & 0xF);
     RenderLoResRow(y / 2);
-    try { Console.SetCursorPosition(savedLeft, savedTop); } catch { }
+    try { _io.SetCursorPosition(savedLeft, savedTop); } catch { }
 }
 
 // Executes VLIN y1,y2 AT x: draw a vertical line from y1 to y2 at column x.
@@ -1629,14 +1638,14 @@ private void ExecuteVlin()
     _tokenPos = _evaluator.Position;
 
     if (x < 0 || x >= 40) return;
-    int savedLeft = Console.CursorLeft, savedTop = Console.CursorTop;
+    int savedLeft = _io.CursorLeft, savedTop = _io.CursorTop;
     int lo = Math.Max(0, Math.Min(y1, y2));
     int hi = Math.Min(39, Math.Max(y1, y2));
     for (int y = lo; y <= hi; y++)
         _loRes[x, y] = (byte)(_loResColor & 0xF);
     for (int r = lo / 2; r <= hi / 2; r++)
         RenderLoResRow(r);
-    try { Console.SetCursorPosition(savedLeft, savedTop); } catch { }
+    try { _io.SetCursorPosition(savedLeft, savedTop); } catch { }
 }
 
 // Executes the DEL statement, deleting program lines in a range.

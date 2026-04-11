@@ -1,6 +1,6 @@
 # Applesoft BASIC Emulator
 
-A Windows command-line emulator for Apple II Applesoft BASIC, written in C#. Create, edit, and run simple Applesoft BASIC programs just like on a real Apple ][.
+A C# Applesoft BASIC emulator for Apple ][ style programs, now exposed as a web API so it can be hosted on Azure App Service.
 
 ```
                 APPLESOFT BASIC EMULATOR
@@ -26,9 +26,57 @@ dotnet build
 dotnet run
 ```
 
-The emulator launches with the classic `]` prompt. Type BASIC commands directly or enter line-numbered programs. Type `QUIT` or `EXIT` to leave.
+The app starts an HTTP API on `http://localhost:5000` by default.
 
-## Usage
+## API Quick Start
+
+### 1) Create a session
+
+```bash
+curl -s -X POST http://localhost:5000/api/session
+```
+
+### 2) Store program lines
+
+```bash
+curl -s -X POST http://localhost:5000/api/session/<sessionId>/execute \
+      -H "Content-Type: application/json" \
+      -d '{"command":"10 PRINT \"HELLO\""}'
+```
+
+### 3) Run the program
+
+```bash
+curl -s -X POST http://localhost:5000/api/session/<sessionId>/execute \
+      -H "Content-Type: application/json" \
+      -d '{"command":"RUN"}'
+```
+
+### 4) Reset a session
+
+```bash
+curl -s -X POST http://localhost:5000/api/session/<sessionId>/reset
+```
+
+## API Endpoints
+
+| Method | Route | Purpose |
+|---|---|---|
+| `POST` | `/api/session` | Create a new emulator session |
+| `POST` | `/api/session/{sessionId}/execute` | Run one command in an existing session |
+| `POST` | `/api/session/{sessionId}/reset` | Reset interpreter state for a session |
+
+`/execute` request payload:
+
+```json
+{
+      "command": "INPUT \"N\";A:PRINT A",
+      "inputs": ["7"],
+      "keyInputs": "Y"
+}
+```
+
+## BASIC Usage
 
 ### Entering a Program
 
@@ -186,7 +234,7 @@ The emulator is composed of three main components:
 - **Tokenizer** (`Tokenizer.cs`) — Lexes input into tokens (keywords, numbers, strings, operators)
 - **Expression Evaluator** (`ExpressionEvaluator.cs`) — Recursive-descent parser handling operator precedence, function calls, and variable access
 - **Interpreter** (`Interpreter.cs`) — Manages program storage, executes statements, and handles flow control (GOTO, GOSUB, FOR/NEXT, IF/THEN)
-- **Program** (`Program.cs`) — REPL loop with the classic `]` prompt
+- **Program** (`Program.cs`) — ASP.NET Core minimal API host with per-session interpreter state
 
 ## Limitations
 

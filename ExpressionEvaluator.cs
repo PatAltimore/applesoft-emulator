@@ -348,7 +348,7 @@ public class ExpressionEvaluator
                 Expect(TokenType.LeftParen);
                 Evaluate(); // argument is ignored in real Applesoft
                 Expect(TokenType.RightParen);
-                return BasicValue.FromNumber(Console.CursorLeft);
+                return BasicValue.FromNumber(_interpreter.GetCursorLeft());
 
             case TokenType.SCRN:
                 Advance();
@@ -433,7 +433,7 @@ public class ExpressionEvaluator
                 var tabVal = Evaluate();
                 Expect(TokenType.RightParen);
                 int tabPos = Math.Max(0, (int)tabVal.NumberValue - 1);
-                int spaces = Math.Max(0, tabPos - Console.CursorLeft);
+                int spaces = Math.Max(0, tabPos - _interpreter.GetCursorLeft());
                 return BasicValue.FromString(new string(' ', spaces));
 
             case TokenType.SPC:

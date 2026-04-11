@@ -1,71 +1,172 @@
+using System.Collections.Concurrent;
 using ApplesoftEmulator;
 
-Console.Title = "Applesoft BASIC Emulator";
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddSingleton<SessionStore>();
 
-// Display startup banner
-Console.WriteLine();
-Console.WriteLine("                APPLESOFT BASIC EMULATOR");
-Console.WriteLine("          Based on Apple ][ Applesoft BASIC");
-Console.WriteLine();
-Console.WriteLine("  Type BASIC commands or line-numbered programs.");
-Console.WriteLine("  Commands: RUN, LIST, NEW, SAVE <filename>, LOAD <filename>, CATALOG");
-Console.WriteLine("  Type QUIT or EXIT to leave.");
-Console.WriteLine();
+var app = builder.Build();
 
-// Entry point for the Applesoft BASIC Emulator application.
-var interpreter = new Interpreter();
-// The tokenizer instance used for parsing user input.
-var tokenizer = new Tokenizer();
-
-// Main REPL loop for the Applesoft BASIC Emulator.
-while (true)
+app.MapGet("/", () => Results.Ok(new
 {
-    Console.Write("]");
-    string? input = Console.ReadLine();
-
-    if (input == null) break;
-    input = input.TrimEnd();
-    if (string.IsNullOrWhiteSpace(input)) continue;
-
-    // Exit commands
-    if (input.Equals("QUIT", StringComparison.OrdinalIgnoreCase) ||
-        input.Equals("EXIT", StringComparison.OrdinalIgnoreCase))
+    name = "Applesoft BASIC Emulator API",
+    endpoints = new[]
     {
-        break;
+        "POST /api/session",
+        "POST /api/session/{sessionId}/execute",
+        "POST /api/session/{sessionId}/reset"
+    }
+}));
+
+app.MapPost("/api/session", (SessionStore sessions) =>
+{
+    var session = sessions.CreateSession();
+    return Results.Ok(new { sessionId = session.Id });
+});
+
+app.MapPost("/api/session/{sessionId}/reset", (string sessionId, SessionStore sessions) =>
+{
+    var session = sessions.GetOrCreate(sessionId);
+    lock (session.Gate)
+    {
+        session.Reset();
     }
 
-    try
+    return Results.Ok(new { sessionId = session.Id, reset = true });
+});
+
+app.MapPost("/api/session/{sessionId}/execute", (string sessionId, ExecuteRequest request, SessionStore sessions) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Command))
     {
-        // Check if line starts with a line number (program entry)
-        string trimmed = input.TrimStart();
-        if (trimmed.Length > 0 && char.IsDigit(trimmed[0]))
+        return Results.BadRequest(new { error = "command is required" });
+    }
+
+    var session = sessions.GetOrCreate(sessionId);
+    lock (session.Gate)
+    {
+        var io = new BufferedRuntimeIO(request.Inputs, request.KeyInputs?.ToCharArray());
+        session.Interpreter.SetRuntimeIO(io);
+
+        try
         {
-            int i = 0;
-            while (i < trimmed.Length && char.IsDigit(trimmed[i])) i++;
-            if (int.TryParse(trimmed[..i], out int lineNum))
-            {
-                string rest = trimmed[i..].TrimStart();
-                if (string.IsNullOrEmpty(rest))
-                {
-                    // Just a line number = delete that line
-                    interpreter.StoreLine(lineNum, "");
-                }
-                else
-                {
-                    interpreter.StoreLine(lineNum, rest);
-                }
-                continue;
-            }
+            ExecuteCommand(session.Interpreter, request.Command);
+        }
+        catch (Exception ex)
+        {
+            io.WriteLine($"?ERROR: {ex.Message}");
         }
 
-        // Direct mode execution
-        interpreter.ExecuteDirect(input.ToUpper() == "RUN" ? "RUN" : input);
+        return Results.Ok(new ExecuteResponse(io.Output));
     }
-    catch (Exception ex)
+});
+
+app.Run();
+
+static void ExecuteCommand(Interpreter interpreter, string input)
+{
+    var trimmedInput = input.TrimEnd();
+    if (string.IsNullOrWhiteSpace(trimmedInput))
     {
-        Console.WriteLine($"?ERROR: {ex.Message}");
+        return;
+    }
+
+    if (trimmedInput.Equals("QUIT", StringComparison.OrdinalIgnoreCase) ||
+        trimmedInput.Equals("EXIT", StringComparison.OrdinalIgnoreCase))
+    {
+        return;
+    }
+
+    var trimmed = trimmedInput.TrimStart();
+    if (trimmed.Length > 0 && char.IsDigit(trimmed[0]))
+    {
+        int i = 0;
+        while (i < trimmed.Length && char.IsDigit(trimmed[i]))
+        {
+            i++;
+        }
+
+        if (int.TryParse(trimmed[..i], out int lineNum))
+        {
+            string rest = trimmed[i..].TrimStart();
+            interpreter.StoreLine(lineNum, rest);
+            return;
+        }
+    }
+
+    interpreter.ExecuteDirect(trimmedInput.ToUpperInvariant() == "RUN" ? "RUN" : trimmedInput);
+}
+
+sealed record ExecuteRequest(string Command, string[]? Inputs, string? KeyInputs);
+sealed record ExecuteResponse(string Output);
+
+sealed class SessionStore
+{
+    private readonly ConcurrentDictionary<string, EmulatorSession> _sessions = new(StringComparer.OrdinalIgnoreCase);
+    private readonly string _seedDiskPath;
+    private readonly string _sessionRoot;
+
+    public SessionStore()
+    {
+        _seedDiskPath = Path.Combine(Directory.GetCurrentDirectory(), "disk");
+        _sessionRoot = Path.Combine(AppContext.BaseDirectory, "session-data");
+        Directory.CreateDirectory(_sessionRoot);
+    }
+
+    public EmulatorSession CreateSession()
+    {
+        var id = Guid.NewGuid().ToString("N");
+        return GetOrCreate(id);
+    }
+
+    public EmulatorSession GetOrCreate(string sessionId)
+    {
+        return _sessions.GetOrAdd(sessionId, CreateInternal);
+    }
+
+    private EmulatorSession CreateInternal(string sessionId)
+    {
+        var diskPath = Path.Combine(_sessionRoot, sessionId, "disk");
+        Directory.CreateDirectory(diskPath);
+        SeedDisk(diskPath);
+
+        var interpreter = new Interpreter(new BufferedRuntimeIO(), diskPath);
+        return new EmulatorSession(sessionId, diskPath, interpreter);
+    }
+
+    private void SeedDisk(string destination)
+    {
+        if (!Directory.Exists(_seedDiskPath))
+        {
+            return;
+        }
+
+        foreach (var source in Directory.GetFiles(_seedDiskPath, "*.bas"))
+        {
+            var target = Path.Combine(destination, Path.GetFileName(source));
+            if (!File.Exists(target))
+            {
+                File.Copy(source, target);
+            }
+        }
     }
 }
 
-Console.WriteLine();
-Console.WriteLine("GOODBYE.");
+sealed class EmulatorSession
+{
+    public EmulatorSession(string id, string diskPath, Interpreter interpreter)
+    {
+        Id = id;
+        DiskPath = diskPath;
+        Interpreter = interpreter;
+    }
+
+    public string Id { get; }
+    public string DiskPath { get; }
+    public object Gate { get; } = new();
+    public Interpreter Interpreter { get; private set; }
+
+    public void Reset()
+    {
+        Interpreter = new Interpreter(new BufferedRuntimeIO(), DiskPath);
+    }
+}
