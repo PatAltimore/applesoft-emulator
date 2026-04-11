@@ -1,0 +1,16 @@
+name: applesoft-emulator
+metadata:
+  template: applesoft-emulator@0.0.1-beta
+services:
+  api:
+    project: .
+    language: dotnet
+    host: appservice
+  web:
+    project: ./web
+    language: js
+    host: staticwebapp
+    dist: .
+infra:
+  provider: bicep
+  path: infra

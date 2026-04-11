@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Applesoft Network Terminal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@400;700&family=VT323&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="config.js"></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="page-shell">
+    <header class="masthead">
+      <div>
+        <p class="eyebrow">1983 REMOTE COMPUTER CLUB</p>
+        <h1>APPLE ][ NETWORK TERMINAL</h1>
+      </div>
+      <div class="status-lights" aria-label="System status">
+        <span class="light light-red"></span>
+        <span class="light light-amber"></span>
+        <span class="light light-green"></span>
+      </div>
+    </header>
+
+    <main class="console-layout">
+      <aside class="control-panel panel">
+        <section>
+          <h2>System</h2>
+          <dl class="telemetry">
+            <div>
+              <dt>Link</dt>
+              <dd id="api-status">Checking...</dd>
+            </div>
+            <div>
+              <dt>Session</dt>
+              <dd id="session-id">OFFLINE</dd>
+            </div>
+            <div>
+              <dt>Backend</dt>
+              <dd id="api-base-url" class="tiny"></dd>
+            </div>
+          </dl>
+        </section>
+
+        <section>
+          <h2>Disks</h2>
+          <div class="button-grid">
+            <button type="button" data-sequence="catalog">CATALOG</button>
+            <button type="button" data-sequence="lemonade">LEMONADE</button>
+            <button type="button" data-sequence="adventure">ADVENTURE</button>
+            <button type="button" data-sequence="guess">GUESS</button>
+          </div>
+        </section>
+
+        <section>
+          <h2>Disk Browser</h2>
+          <div class="button-grid">
+            <button type="button" id="scan-disk">SCAN DISK</button>
+            <button type="button" id="load-selected">LOAD SELECTED</button>
+            <button type="button" id="run-selected">RUN SELECTED</button>
+          </div>
+          <ul id="disk-list" class="list-pane" aria-label="Programs on disk"></ul>
+        </section>
+
+        <section>
+          <h2>Macros</h2>
+          <div class="button-grid">
+            <button type="button" data-sequence="hello">HELLO</button>
+            <button type="button" data-sequence="fibonacci">FIBONACCI</button>
+            <button type="button" data-command="LIST">LIST</button>
+            <button type="button" data-command="RUN">RUN</button>
+          </div>
+        </section>
+
+        <section>
+          <h2>Power</h2>
+          <div class="button-grid">
+            <button type="button" id="new-session">NEW SESSION</button>
+            <button type="button" id="reset-session">RESET</button>
+            <button type="button" id="clear-screen">CLEAR CRT</button>
+          </div>
+        </section>
+
+        <section>
+          <h2>History</h2>
+          <div class="button-grid">
+            <button type="button" id="clear-history">CLEAR HISTORY</button>
+          </div>
+          <ul id="history-list" class="list-pane" aria-label="Command history"></ul>
+        </section>
+      </aside>
+
+      <section class="crt panel" aria-label="Applesoft terminal">
+        <div class="crt-bezel">
+          <div class="crt-screen">
+            <pre id="output" class="output" aria-live="polite"></pre>
+            <div class="io-rack" aria-label="Execution inputs">
+              <label for="inputs-queue">INPUT queue (comma-separated)</label>
+              <input id="inputs-queue" type="text" placeholder="7,YES,42">
+              <label for="key-inputs">Key stream (for GET/ASC prompts)</label>
+              <input id="key-inputs" type="text" placeholder="  Y   ">
+            </div>
+            <form id="command-form" class="command-bar">
+              <label class="prompt" for="command-input">]</label>
+              <textarea id="command-input" rows="2" spellcheck="false" placeholder='10 PRINT "HELLO"'></textarea>
+              <button type="submit">SEND</button>
+            </form>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

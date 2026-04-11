@@ -1,0 +1,8 @@
+{
+  "name": "applesoft-retro-frontend",
+  "private": true,
+  "version": "0.0.1",
+  "scripts": {
+    "build": "echo static web app ready"
+  }
+}

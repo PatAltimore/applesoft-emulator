@@ -2,19 +2,47 @@ using System.Collections.Concurrent;
 using ApplesoftEmulator;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ??
+    [
+        "http://localhost:4280",
+        "http://127.0.0.1:4280",
+        "http://localhost:5500",
+        "http://127.0.0.1:5500"
+    ];
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("frontend", policy =>
+    {
+        policy.WithOrigins(allowedOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
+
 builder.Services.AddSingleton<SessionStore>();
 
 var app = builder.Build();
+
+app.UseCors("frontend");
 
 app.MapGet("/", () => Results.Ok(new
 {
     name = "Applesoft BASIC Emulator API",
     endpoints = new[]
     {
+        "GET /health",
         "POST /api/session",
         "POST /api/session/{sessionId}/execute",
         "POST /api/session/{sessionId}/reset"
     }
+}));
+
+app.MapGet("/health", () => Results.Ok(new
+{
+    status = "ok"
 }));
 
 app.MapPost("/api/session", (SessionStore sessions) =>
@@ -108,7 +136,7 @@ sealed class SessionStore
     public SessionStore()
     {
         _seedDiskPath = Path.Combine(Directory.GetCurrentDirectory(), "disk");
-        _sessionRoot = Path.Combine(AppContext.BaseDirectory, "session-data");
+        _sessionRoot = Path.Combine(Path.GetTempPath(), "applesoft-emulator", "session-data");
         Directory.CreateDirectory(_sessionRoot);
     }
 

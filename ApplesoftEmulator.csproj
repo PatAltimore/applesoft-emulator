@@ -4,6 +4,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <UserSecretsId>a49eec04-cfc4-454c-915a-a527ede2487a</UserSecretsId>
   </PropertyGroup>
 
   <!-- Copy disk folder contents to build output so LOAD/CATALOG work from any platform -->

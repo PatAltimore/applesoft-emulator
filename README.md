@@ -28,6 +28,32 @@ dotnet run
 
 The app starts an HTTP API on `http://localhost:5000` by default.
 
+Health check:
+
+```bash
+curl -s http://localhost:5000/health
+```
+
+## Retro Frontend
+
+The repo also includes a retro browser frontend in `web/` designed to feel like an Apple II terminal session while talking to the deployed emulator API.
+
+To preview it locally with a simple static file server:
+
+```bash
+cd web
+python -m http.server 5500
+```
+
+Then open `http://localhost:5500`.
+
+The frontend reads its backend endpoint from `web/config.js`.
+
+Frontend extras:
+
+- Disk browser: `SCAN DISK` discovers programs from `CATALOG`; select one and use `LOAD SELECTED` / `RUN SELECTED`.
+- Command history: previous commands are saved in browser storage and can be recalled with arrow up/down.
+
 ## API Quick Start
 
 ### 1) Create a session
@@ -62,9 +88,33 @@ curl -s -X POST http://localhost:5000/api/session/<sessionId>/reset
 
 | Method | Route | Purpose |
 |---|---|---|
+| `GET` | `/health` | Basic health probe |
 | `POST` | `/api/session` | Create a new emulator session |
 | `POST` | `/api/session/{sessionId}/execute` | Run one command in an existing session |
 | `POST` | `/api/session/{sessionId}/reset` | Reset interpreter state for a session |
+
+## Azure Hosting
+
+- API: Azure App Service
+- Frontend: Azure Static Web Apps Free
+
+The API is configured to allow the Static Web App origin and common local development origins via CORS.
+
+### Static Web Apps GitHub Secret
+
+The workflow in `.github/workflows/azure-static-web-app.yml` expects repository secret `AZURE_STATIC_WEB_APPS_API_TOKEN`.
+
+After authenticating GitHub CLI (`gh auth login`), set the secret with:
+
+```bash
+./scripts/set-swa-secret.sh
+```
+
+You can also pass explicit values:
+
+```bash
+./scripts/set-swa-secret.sh <owner/repo> <resource-group> <static-web-app-name>
+```
 
 `/execute` request payload:
 

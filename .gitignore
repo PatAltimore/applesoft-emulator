@@ -35,3 +35,12 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 .DS_Store
+
+## Environment files
+.env
+.env.*
+!.env.example
+
+## Azure Developer CLI local state
+.azure/*
+!.azure/deployment-plan.md
