@@ -229,20 +229,23 @@ async function resetSession() {
 }
 
 async function executeCommand(command) {
-  if (!command.trim()) {
-    return;
-  }
-
   if (!sessionId) {
     await createSession();
   }
 
-  // Check if we're waiting for input
+  // If a program is waiting for input, submit through the live channel first.
+  // This allows GET prompts like "PRESS ANY KEY" to accept Enter/blank input.
   if (runtimeHintEl.classList.contains('active')) {
-    // Submit as input instead of a command
     if (hubReady) {
-      await hubConnection.invoke('SubmitInput', sessionId, command);
+      const inputToSend = currentPromptIsKeyInput
+        ? (command.length === 0 ? '\n' : command[0])
+        : command;
+      await hubConnection.invoke('SubmitInput', sessionId, inputToSend);
     }
+    return;
+  }
+
+  if (!command.trim()) {
     return;
   }
 
@@ -302,6 +305,9 @@ newSessionButton.addEventListener('click', async () => {
 });
 
 resetSessionButton.addEventListener('click', async () => {
+  replaceOutput('APPLE ][ ONLINE\nREMOTE BASIC SUBSYSTEM\n');
+  clearRuntimeHint();
+
   try {
     await resetSession();
   } catch (error) {

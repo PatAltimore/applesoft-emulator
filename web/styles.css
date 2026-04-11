@@ -10,6 +10,7 @@
   --danger: #ff6d5e;
   --paper: #d2f2b4;
   --shadow: rgba(0, 0, 0, 0.45);
+  --console-font: "Silkscreen", "VT323", monospace;
 }
 
 * {
@@ -258,6 +259,8 @@ button:focus-visible {
   position: relative;
   z-index: 1;
   margin: 0;
+  font-family: var(--console-font);
+  letter-spacing: 0.02em;
   overflow-y: auto;
   overflow-x: hidden;
   max-height: 55vh;
@@ -291,6 +294,7 @@ button:focus-visible {
   border: 2px solid #51632e;
   background: rgba(8, 12, 4, 0.9);
   color: #d7ff79;
+  font-family: var(--console-font);
   font-size: 1rem;
   padding: 0.4rem 0.55rem;
   margin-bottom: 0.5rem;
@@ -322,7 +326,7 @@ button:focus-visible {
 }
 
 .prompt {
-  font-family: "Silkscreen", "Press Start 2P", monospace;
+  font-family: var(--console-font);
   font-size: 1.9rem;
   color: #d7ff79;
   text-shadow: 0 0 8px rgba(145, 255, 102, 0.35);
@@ -336,8 +340,9 @@ textarea {
   border: 2px solid #51632e;
   background: rgba(8, 12, 4, 0.92);
   color: var(--phosphor);
-  font: inherit;
+  font-family: var(--console-font);
   font-size: 1.6rem;
+  letter-spacing: 0.02em;
   padding: 0.55rem 0.7rem;
 }
 
