@@ -10,7 +10,7 @@
   --danger: #ff6d5e;
   --paper: #d2f2b4;
   --shadow: rgba(0, 0, 0, 0.45);
-  --console-font: "Silkscreen", "VT323", monospace;
+  --console-font: "VT323", monospace;
 }
 
 * {
