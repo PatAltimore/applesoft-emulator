@@ -13,6 +13,10 @@ const clearScreenButton = document.getElementById('clear-screen');
 const clearHistoryButton = document.getElementById('clear-history');
 const historyListEl = document.getElementById('history-list');
 const runtimeHintEl = document.getElementById('runtime-hint');
+const useBrowserRuntime = config.useBrowserRuntime !== false;
+const localRuntime = useBrowserRuntime && window.LocalApplesoftRuntime
+  ? new window.LocalApplesoftRuntime()
+  : null;
 
 let sessionId = null;
 let currentPromptIsKeyInput = false;
@@ -22,16 +26,20 @@ let historyCursor = commandHistory.length;
 
 let hubConnection = null;
 let hubReady = false;
+const outputStyleState = {
+  inverse: false,
+  flash: false
+};
 
 apiBaseUrlEl.textContent = apiBaseUrl;
 
 function appendOutput(text = '') {
-  outputEl.textContent += `${text}\n`;
-  outputEl.scrollTop = outputEl.scrollHeight;
+  appendOutputChunk(`${text}\n`);
 }
 
 function appendOutputChunk(text = '') {
-  outputEl.textContent += normalizeOutputForDisplay(text);
+  const normalized = normalizeOutputForDisplay(text);
+  appendStyledText(normalized);
   outputEl.scrollTop = outputEl.scrollHeight;
 }
 
@@ -47,7 +55,65 @@ function normalizeOutputForDisplay(text = '') {
 }
 
 function replaceOutput(text) {
-  outputEl.textContent = `${text}\n`;
+  outputEl.textContent = '';
+  outputStyleState.inverse = false;
+  outputStyleState.flash = false;
+  appendOutputChunk(`${text}\n`);
+}
+
+function applyAnsiCodes(codesText) {
+  const codes = codesText.split(';').map(code => Number.parseInt(code, 10));
+  for (const code of codes) {
+    if (code === 0) {
+      outputStyleState.inverse = false;
+      outputStyleState.flash = false;
+    } else if (code === 7) {
+      outputStyleState.inverse = true;
+    } else if (code === 27) {
+      outputStyleState.inverse = false;
+    } else if (code === 5) {
+      outputStyleState.flash = true;
+    } else if (code === 25) {
+      outputStyleState.flash = false;
+    }
+  }
+}
+
+function appendStyledText(text) {
+  const ansiRegex = /\x1b\[([0-9;]+)m/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = ansiRegex.exec(text)) !== null) {
+    const plain = text.slice(lastIndex, match.index);
+    appendStyledRun(plain);
+    applyAnsiCodes(match[1]);
+    lastIndex = ansiRegex.lastIndex;
+  }
+
+  appendStyledRun(text.slice(lastIndex));
+}
+
+function appendStyledRun(text) {
+  if (!text) {
+    return;
+  }
+
+  const isStyled = outputStyleState.inverse || outputStyleState.flash;
+  if (!isStyled) {
+    outputEl.appendChild(document.createTextNode(text));
+    return;
+  }
+
+  const span = document.createElement('span');
+  if (outputStyleState.inverse) {
+    span.classList.add('crt-inverse');
+  }
+  if (outputStyleState.flash) {
+    span.classList.add('crt-flash');
+  }
+  span.textContent = text;
+  outputEl.appendChild(span);
 }
 
 function clearRuntimeHint() {
@@ -64,7 +130,7 @@ function setSession(id) {
   sessionId = id;
   sessionIdEl.textContent = id ?? 'OFFLINE';
 
-  if (hubReady && sessionId) {
+  if (!useBrowserRuntime && hubReady && sessionId) {
     hubConnection.invoke('AttachSession', sessionId).catch(error => {
       appendOutput(`?HUB ATTACH ERROR: ${error.message}`);
     });
@@ -136,6 +202,11 @@ async function apiRequest(path, options = {}) {
 }
 
 async function initializeHub() {
+  if (useBrowserRuntime) {
+    hubReady = false;
+    return;
+  }
+
   if (!window.signalR) {
     appendOutput('?SIGNALR CLIENT NOT AVAILABLE. USING LEGACY MODE.');
     return;
@@ -194,6 +265,11 @@ async function initializeHub() {
 }
 
 async function checkHealth() {
+  if (useBrowserRuntime) {
+    apiStatusEl.textContent = 'LOCAL';
+    return;
+  }
+
   try {
     const health = await apiRequest('/health', { method: 'GET' });
     apiStatusEl.textContent = health.status?.toUpperCase() ?? 'OK';
@@ -204,17 +280,36 @@ async function checkHealth() {
 }
 
 async function createSession() {
+  if (useBrowserRuntime && localRuntime) {
+    setSession(localRuntime.createSession());
+    appendOutput(`NEW SESSION: ${sessionId}`);
+    appendOutput('READY. BROWSER INTERPRETER MODE ENABLED.');
+    await executeCommand('HELP');
+    return;
+  }
+
   const data = await apiRequest('/api/session', { method: 'POST', body: '{}' });
   setSession(data.sessionId);
   appendOutput(`NEW SESSION: ${data.sessionId}`);
   appendOutput(hubReady
     ? 'READY. LIVE INTERACTIVE MODE ENABLED.'
     : 'READY. TYPE BASIC OR USE THE DISK BUTTONS.');
+
+  await executeCommand('HELP');
 }
 
 async function resetSession() {
   if (!sessionId) {
     await createSession();
+    return;
+  }
+
+  if (useBrowserRuntime && localRuntime) {
+    await localRuntime.reset(sessionId);
+    appendOutput('SESSION RESET. MEMORY CLEARED.');
+    currentPromptIsKeyInput = false;
+    clearRuntimeHint();
+    await executeCommand('HELP');
     return;
   }
 
@@ -226,11 +321,39 @@ async function resetSession() {
   if (hubReady) {
     await hubConnection.invoke('AttachSession', sessionId);
   }
+
+  await executeCommand('HELP');
 }
 
 async function executeCommand(command) {
   if (!sessionId) {
     await createSession();
+  }
+
+  if (useBrowserRuntime && localRuntime) {
+    if (!command.trim() && !runtimeHintEl.classList.contains('active')) {
+      return;
+    }
+
+    if (!runtimeHintEl.classList.contains('active') && command.trim()) {
+      appendOutput(`]${command}`);
+      rememberCommand(command);
+    }
+
+    const result = await localRuntime.execute(sessionId, command);
+    if (result?.output) {
+      appendOutputChunk(result.output);
+    }
+
+    if (result?.awaitingInput) {
+      currentPromptIsKeyInput = false;
+      setRuntimeHint('Program is waiting for input. Type your answer and press SEND.', 'warning');
+      commandInput.focus();
+    } else {
+      currentPromptIsKeyInput = false;
+      clearRuntimeHint();
+    }
+    return;
   }
 
   // If a program is waiting for input, submit through the live channel first.
@@ -328,11 +451,19 @@ clearHistoryButton.addEventListener('click', () => {
   appendOutput('COMMAND HISTORY CLEARED.');
 });
 
-replaceOutput('APPLE ][ ONLINE\nBOOTING REMOTE BASIC SUBSYSTEM...\n');
+replaceOutput('APPLE ][ ONLINE\nBOOTING BROWSER BASIC SUBSYSTEM...\n');
 renderHistory();
 
-Promise.all([checkHealth(), initializeHub()])
-  .then(createSession)
-  .catch(error => {
-    appendOutput(`?ERROR: ${error.message}`);
-  });
+if (useBrowserRuntime) {
+  checkHealth()
+    .then(createSession)
+    .catch(error => {
+      appendOutput(`?ERROR: ${error.message}`);
+    });
+} else {
+  Promise.all([checkHealth(), initializeHub()])
+    .then(createSession)
+    .catch(error => {
+      appendOutput(`?ERROR: ${error.message}`);
+    });
+}

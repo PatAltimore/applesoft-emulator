@@ -83,6 +83,7 @@ private int _tokenPos;
 private int _currentLineNumber;
 // Indicates whether the interpreter is currently running a program.
 private bool _running;
+private volatile bool _stopRequested;
 // Set to true by GotoLine/ExecuteReturn so ExecuteStatements exits immediately.
 private bool _jumped;
 // List of line numbers in the current program.
@@ -94,10 +95,14 @@ private int _programIndex;
 // Simulated memory for PEEK and POKE operations.
 private readonly byte[] _memory = new byte[65536];
 
-// LORES graphics (40 columns x 40 rows, 16 colors)
-private byte[,] _loRes = new byte[40, 40];
-private int _loResColor;
-private bool _graphicsMode;
+private enum TextRenderMode
+{
+    Normal,
+    Inverse,
+    Flash
+}
+
+private TextRenderMode _textRenderMode = TextRenderMode.Normal;
 
 // Apple II soft text window (controlled by POKE 32-35).
 // These mirror the Apple II zero-page locations:
@@ -109,35 +114,6 @@ private int _winLeft   = 0;   // POKE 32
 private int _winRight  = 40;  // POKE 33 (stored as +1 to match Apple II)
 private int _winTop    = 0;   // POKE 34
 private int _winBottom = 23;  // POKE 35
-
-// Speaker emulation: tracks POKE 49200 (Apple II $C030) toggles and synthesizes beeps.
-private int _speakerToggleCount;
-private long _speakerBurstStartTicks;
-private long _speakerLastToggleTicks;
-private static readonly System.Diagnostics.Stopwatch _speakerClock = System.Diagnostics.Stopwatch.StartNew();
-// Approximate Apple II Applesoft speed: ~1500 BASIC FOR/NEXT iterations per second at 1 MHz.
-private const double AppleIIMsPerToggle = 0.67;
-
-// Apple II LORES 16-color palette (approximate RGB)
-private static readonly (int R, int G, int B)[] LoResColors =
-{
-    (  0,   0,   0),  // 0  Black
-    (221,   0,  51),  // 1  Red
-    (  0,   0, 204),  // 2  Dark Blue
-    (187,   0, 204),  // 3  Purple
-    (  0, 170,   0),  // 4  Dark Green
-    (128, 128, 128),  // 5  Gray 1
-    ( 34,  34, 221),  // 6  Medium Blue
-    (102, 170, 255),  // 7  Light Blue
-    ( 85,  51,   0),  // 8  Brown
-    (255, 119,   0),  // 9  Orange
-    (170, 170, 170),  // 10 Gray 2
-    (255, 119, 119),  // 11 Pink
-    (  0, 221,   0),  // 12 Light Green
-    (238, 238,   0),  // 13 Yellow
-    (  0, 238, 238),  // 14 Aqua
-    (255, 255, 255),  // 15 White
-};
 
 // Path to the Disk folder used for SAVE, LOAD, and CATALOG.
 private readonly string _diskPath;
@@ -206,6 +182,7 @@ public void StoreLine(int lineNumber, string text)
 // startLine: The line number to start execution from, or -1 for the first line.
 public void Run(int startLine = -1)
     {
+        _stopRequested = false;
         _variables.Clear();
         _arrays.Clear();
         _arrayDimensions.Clear();
@@ -213,7 +190,7 @@ public void Run(int startLine = -1)
         _gosubStack.Clear();
         _dataPointer = 0;
         _winLeft = 0; _winRight = 40; _winTop = 0; _winBottom = 23;
-        _graphicsMode = false;
+        _textRenderMode = TextRenderMode.Normal;
         CollectData();
 
         _lineNumbers = new List<int>(_program.Keys);
@@ -239,7 +216,7 @@ public void Run(int startLine = -1)
 
         try
         {
-            while (_running)
+            while (_running && !_stopRequested)
             {
                 if (!_jumped)
                 {
@@ -255,6 +232,9 @@ public void Run(int startLine = -1)
                 _jumped = false;
                 ExecuteStatements();
             }
+
+            if (_stopRequested)
+                throw new StopException(_currentLineNumber);
         }
         catch (StopException ex)
         {
@@ -275,7 +255,6 @@ public void Run(int startLine = -1)
         finally
         {
             _running = false;
-            FlushSpeaker(); // play any remaining sound after program ends
         }
     }
 
@@ -283,6 +262,7 @@ public void Run(int startLine = -1)
 // line: The line of code to execute.
 public void ExecuteDirect(string line)
     {
+        _stopRequested = false;
         _currentTokens = _tokenizer.Tokenize(line);
         _tokenPos = 0;
         _currentLineNumber = 0;
@@ -293,13 +273,16 @@ public void ExecuteDirect(string line)
         try
         {
             // Direct mode: execute the single line, then follow any jumps (e.g. RUN).
-            while (_running)
+            while (_running && !_stopRequested)
             {
                 _jumped = false;
                 ExecuteStatements();
                 if (!_jumped) break;
                 // A jump (e.g. GOTO/RUN) was issued — continue from the new position.
             }
+
+            if (_stopRequested)
+                throw new StopException(_currentLineNumber);
         }
         catch (InputExhaustedException)
         {
@@ -311,8 +294,23 @@ public void ExecuteDirect(string line)
         }
         finally
         {
-            FlushSpeaker();
+            _running = false;
         }
+    }
+
+// Prints a built-in command summary for interactive users.
+public void PrintHelp()
+    {
+        _io.WriteLine("SUPPORTED COMMANDS:");
+        _io.WriteLine("  HELP            SHOW THIS HELP");
+        _io.WriteLine("  RUN [LINE]      RUN PROGRAM (OPTIONAL START LINE)");
+        _io.WriteLine("  LIST [RANGE]    LIST PROGRAM LINES");
+        _io.WriteLine("  NEW             CLEAR PROGRAM AND VARIABLES");
+        _io.WriteLine("  LOAD \"NAME\"     LOAD PROGRAM FROM DISK");
+        _io.WriteLine("  SAVE \"NAME\"     SAVE PROGRAM TO DISK");
+        _io.WriteLine("  CATALOG         LIST PROGRAMS ON DISK");
+        _io.WriteLine("  DEL A,B         DELETE LINE RANGE");
+        _io.WriteLine("  EXIT / QUIT     LEAVE SESSION");
     }
 
 // Lists the program lines between the specified start and end line numbers.
@@ -479,14 +477,8 @@ public void SetArrayValue(string name, List<int> indices, BasicValue value)
         _arrays[key][flatIndex] = value;
     }
 
-// Returns the LORES color index at the given pixel coordinate.
-// x: The column (0-39). y: The row (0-39).
-// Returns: Color index 0-15, or 0 if out of range or not in graphics mode.
-public int GetScrnColor(int x, int y)
-{
-    if (!_graphicsMode || x < 0 || x >= 40 || y < 0 || y >= 40) return 0;
-    return _loRes[x, y];
-}
+// LORES graphics has been removed from this emulator.
+public int GetScrnColor(int x, int y) => 0;
 
 // Returns a pseudo-random number between 0 and 1.
 // arg: If negative, seeds the generator; otherwise, returns a random value.
@@ -507,58 +499,9 @@ public int Peek(int address)
         return 0;
     }
 
-// Records a single speaker toggle at POKE 49200 ($C030).
-private void ToggleSpeaker()
+private void ThrowRemovedFeature(string feature)
 {
-    long now = _speakerClock.ElapsedTicks;
-    if (_speakerToggleCount == 0)
-        _speakerBurstStartTicks = now;
-    _speakerLastToggleTicks = now;
-    _speakerToggleCount++;
-}
-
-// Synthesizes and plays any accumulated speaker toggles as an audible beep.
-// Tight loops (no inter-toggle delay) are mapped to 880 Hz with duration scaled to
-// real Apple II speed.  Delay loops (empty FOR used as a divider) produce a lower
-// frequency derived from the measured inter-toggle interval.
-private void FlushSpeaker()
-{
-    if (_speakerToggleCount < 2)
-    {
-        _speakerToggleCount = 0;
-        return;
-    }
-
-    double elapsedMs = (_speakerLastToggleTicks - _speakerBurstStartTicks)
-                       * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
-    double avgIntervalMs = elapsedMs / (_speakerToggleCount - 1);
-
-    int frequency;
-    int durationMs;
-
-    if (avgIntervalMs < 1.0)
-    {
-        // Tight loop (no per-toggle delay): use Apple II calibrated timing.
-        // Each full wave requires 2 toggles → frequency ≈ 750 Hz on real hardware;
-        // we round to A5 (880 Hz) for a clean tone.
-        frequency = 880;
-        durationMs = (int)(_speakerToggleCount * AppleIIMsPerToggle);
-    }
-    else
-    {
-        // Delay loop: the empty inner FOR/NEXT sleeps 1 ms per iteration (AppleII pacing),
-        // so the Stopwatch interval reflects the intended period.
-        // One full wave = 2 toggles → freq = 1/(2 * interval_sec) = 500 / interval_ms.
-        frequency = Math.Clamp((int)(500.0 / avgIntervalMs), 37, 32767);
-        durationMs = (int)elapsedMs;
-    }
-
-    durationMs = Math.Clamp(durationMs, 5, 10000);
-#pragma warning disable CA1416 // Console.Beep is Windows-only; non-Windows falls into the catch silently
-    try { Console.Beep(frequency, durationMs); } catch { }
-#pragma warning restore CA1416
-
-    _speakerToggleCount = 0;
+    throw new BasicException($"?UNSUPPORTED FEATURE: {feature}");
 }
 
 // Calls a user-defined function (DEF FN) with the specified argument.
@@ -590,7 +533,7 @@ public BasicValue CallUserFunction(string name, BasicValue arg)
 // Executes all statements in the current line.
 private void ExecuteStatements()
     {
-        while (_running && !_jumped && _tokenPos < _currentTokens.Count && _currentTokens[_tokenPos].Type != TokenType.EndOfLine)
+        while (_running && !_stopRequested && !_jumped && _tokenPos < _currentTokens.Count && _currentTokens[_tokenPos].Type != TokenType.EndOfLine)
         {
             // Skip any leading colons (e.g. when resuming mid-line after RETURN).
             while (_tokenPos < _currentTokens.Count && _currentTokens[_tokenPos].Type == TokenType.Colon)
@@ -599,8 +542,16 @@ private void ExecuteStatements()
             if (_tokenPos >= _currentTokens.Count || _currentTokens[_tokenPos].Type == TokenType.EndOfLine)
                 break;
 
+            if (_stopRequested)
+                break;
+
             ExecuteStatement();
         }
+    }
+
+public void RequestStop()
+    {
+        _stopRequested = true;
     }
 
 // Gets the current token being processed.
@@ -647,16 +598,19 @@ private void ExecuteStatement()
                 }
                 _tokenPos++;
                 break;
+            case TokenType.NORMAL: _tokenPos++; _textRenderMode = TextRenderMode.Normal; break;
+            case TokenType.INVERSE: _tokenPos++; _textRenderMode = TextRenderMode.Inverse; break;
+            case TokenType.FLASH: _tokenPos++; _textRenderMode = TextRenderMode.Flash; break;
             case TokenType.HTAB: ExecuteHtab(); break;
             case TokenType.VTAB: ExecuteVtab(); break;
             case TokenType.POKE: ExecutePoke(); break;
             case TokenType.CALL: ExecuteCall(); break;
-            case TokenType.GR: ExecuteGr(); break;
-            case TokenType.TEXT: ExecuteText(); break;
-            case TokenType.COLOR: ExecuteColor(); break;
-            case TokenType.PLOT: ExecutePlot(); break;
-            case TokenType.HLIN: ExecuteHlin(); break;
-            case TokenType.VLIN: ExecuteVlin(); break;
+            case TokenType.GR: _tokenPos++; ThrowRemovedFeature("LORES"); break;
+            case TokenType.TEXT: _tokenPos++; break;
+            case TokenType.COLOR: _tokenPos++; ThrowRemovedFeature("LORES"); break;
+            case TokenType.PLOT: _tokenPos++; ThrowRemovedFeature("LORES"); break;
+            case TokenType.HLIN: _tokenPos++; ThrowRemovedFeature("LORES"); break;
+            case TokenType.VLIN: _tokenPos++; ThrowRemovedFeature("LORES"); break;
             case TokenType.RUN: ExecuteRun(); break;
             case TokenType.LIST: ExecuteList(); break;
             case TokenType.NEW: NewProgram(); _tokenPos++; break;
@@ -705,9 +659,9 @@ private void ExecutePrint()
             _tokenPos = _evaluator.Position;
 
             if (val.IsString)
-                _io.Write(val.StringValue);
+                WriteStyledText(val.StringValue);
             else
-                _io.Write(BasicValue.FormatNumber(val.NumberValue));
+                WriteStyledText(BasicValue.FormatNumber(val.NumberValue));
 
             needNewline = true;
         }
@@ -764,8 +718,6 @@ private void ExecuteGet()
         string varName = CurrentToken.Text;
         _tokenPos++;
 
-        FlushSpeaker(); // play any queued sound before blocking for input
-
         // Read a single key without displaying it
         var key = _io.ReadKey(true);
         string ch = key.KeyChar == '\r' || key.KeyChar == '\n' ? "\r" : key.KeyChar.ToString();
@@ -787,7 +739,6 @@ private void ExecuteGet()
 private void ExecuteInput()
     {
         _tokenPos++; // skip INPUT
-        FlushSpeaker(); // play any queued sound before blocking for input
 
         // Optional prompt string
         string prompt = "? ";
@@ -818,7 +769,7 @@ private void ExecuteInput()
         bool done = false;
         while (!done)
         {
-            _io.Write(prompt);
+            WriteStyledText(prompt);
             string? input = _io.ReadLine() ?? "";
             string[] parts = input.Split(',');
 
@@ -1163,9 +1114,7 @@ private void ExecuteNext()
         }
         else
         {
-            // Done with loop — play any sound accumulated during the loop body.
             _forStack.Pop();
-            FlushSpeaker();
         }
     }
 
@@ -1367,10 +1316,8 @@ private void ExecutePoke()
         int val = (int)_evaluator.Evaluate().NumberValue;
         _tokenPos = _evaluator.Position;
 
-        // Normalise address: Applesoft programs use both 49200 and -16336 for the speaker.
+        // Normalise address for memory-mapped I/O compatibility.
         int normalizedAddr = addr < 0 ? addr + 65536 : addr;
-        if (normalizedAddr == 0xC030) // $C030 = 49200 — Apple II speaker toggle
-            ToggleSpeaker();
 
         // Apple II soft text-window zero-page locations.
         switch (normalizedAddr)
@@ -1500,161 +1447,24 @@ private void ExecuteLoadCmd()
             throw new BasicException("?SYNTAX ERROR: FILENAME EXPECTED");
     }
 
-// Renders one terminal row (covers two LORES pixel rows) using half-block Unicode characters
-// and 24-bit ANSI color. termRow 0 covers LORES rows 0-1, termRow 1 covers rows 2-3, etc.
-private void RenderLoResRow(int termRow)
+private void WriteStyledText(string text)
 {
-    try { _io.SetCursorPosition(0, termRow); } catch { return; }
-    var sb = new System.Text.StringBuilder(40 * 40);
-    for (int x = 0; x < 40; x++)
+    switch (_textRenderMode)
     {
-        int topIdx = _loRes[x, termRow * 2];
-        int botIdx = termRow * 2 + 1 < 40 ? _loRes[x, termRow * 2 + 1] : 0;
-        var top = LoResColors[topIdx];  // background = top half
-        var bot = LoResColors[botIdx];  // foreground = bottom half
-        // ▄ (U+2584) lower-half block: fg paints bottom, bg paints top
-        sb.Append($"\x1b[38;2;{bot.R};{bot.G};{bot.B}m\x1b[48;2;{top.R};{top.G};{top.B}m\u2584");
+        case TextRenderMode.Inverse:
+            _io.Write("\x1b[7m");
+            _io.Write(text);
+            _io.Write("\x1b[0m");
+            break;
+        case TextRenderMode.Flash:
+            _io.Write("\x1b[5m");
+            _io.Write(text);
+            _io.Write("\x1b[0m");
+            break;
+        default:
+            _io.Write(text);
+            break;
     }
-    sb.Append("\x1b[0m");
-    _io.Write(sb.ToString());
-}
-
-// Sets one LORES pixel and immediately redraws the affected terminal row.
-private void PlotPixel(int x, int y, int color)
-{
-    if (x < 0 || x >= 40 || y < 0 || y >= 40) return;
-    _loRes[x, y] = (byte)(color & 0xF);
-    int savedLeft = _io.CursorLeft, savedTop = _io.CursorTop;
-    RenderLoResRow(y / 2);
-    try { _io.SetCursorPosition(savedLeft, savedTop); } catch { }
-}
-
-// Executes the GR statement: switch to LORES graphics mode.
-// Clears the screen and renders a 40x20 terminal block (40x40 LORES pixels)
-// with 4 text rows below (rows 20-23), matching Apple II mixed GR mode.
-private void ExecuteGr()
-{
-    _tokenPos++;
-    _graphicsMode = true;
-    _loRes = new byte[40, 40];
-    _loResColor = 0;
-    // GR sets the text window to rows 20-23 (4-line mixed area at the bottom).
-    _winLeft = 0; _winRight = 40; _winTop = 20; _winBottom = 23;
-    _io.OutputEncoding = System.Text.Encoding.UTF8;
-    _io.Clear();
-    for (int row = 0; row < 20; row++)
-        RenderLoResRow(row);
-    try { _io.SetCursorPosition(0, 20); } catch { }
-}
-
-// Executes the TEXT statement: return to full text mode.
-private void ExecuteText()
-{
-    _tokenPos++;
-    _graphicsMode = false;
-    // Restore full-screen text window.
-    _winLeft = 0; _winRight = 40; _winTop = 0; _winBottom = 23;
-    _io.Clear();
-}
-
-// Executes the COLOR= statement: set the current drawing color (0-15).
-private void ExecuteColor()
-{
-    _tokenPos++; // skip COLOR
-    if (CurrentToken.Type != TokenType.Equal)
-        throw new BasicException("?SYNTAX ERROR");
-    _tokenPos++; // skip =
-    _evaluator.Init(_currentTokens, _tokenPos);
-    int color = (int)_evaluator.Evaluate().NumberValue;
-    _tokenPos = _evaluator.Position;
-    _loResColor = Math.Clamp(color, 0, 15);
-}
-
-// Executes the PLOT x,y statement: draw a pixel at (x,y) in the current color.
-private void ExecutePlot()
-{
-    _tokenPos++;
-    _evaluator.Init(_currentTokens, _tokenPos);
-    int x = (int)_evaluator.Evaluate().NumberValue;
-    _tokenPos = _evaluator.Position;
-
-    if (CurrentToken.Type != TokenType.Comma)
-        throw new BasicException("?SYNTAX ERROR");
-    _tokenPos++;
-
-    _evaluator.Init(_currentTokens, _tokenPos);
-    int y = (int)_evaluator.Evaluate().NumberValue;
-    _tokenPos = _evaluator.Position;
-
-    PlotPixel(x, y, _loResColor);
-}
-
-// Executes HLIN x1,x2 AT y: draw a horizontal line from x1 to x2 at row y.
-private void ExecuteHlin()
-{
-    _tokenPos++;
-    _evaluator.Init(_currentTokens, _tokenPos);
-    int x1 = (int)_evaluator.Evaluate().NumberValue;
-    _tokenPos = _evaluator.Position;
-
-    if (CurrentToken.Type != TokenType.Comma)
-        throw new BasicException("?SYNTAX ERROR");
-    _tokenPos++;
-
-    _evaluator.Init(_currentTokens, _tokenPos);
-    int x2 = (int)_evaluator.Evaluate().NumberValue;
-    _tokenPos = _evaluator.Position;
-
-    if (CurrentToken.Type != TokenType.AT)
-        throw new BasicException("?SYNTAX ERROR: EXPECTED AT");
-    _tokenPos++;
-
-    _evaluator.Init(_currentTokens, _tokenPos);
-    int y = (int)_evaluator.Evaluate().NumberValue;
-    _tokenPos = _evaluator.Position;
-
-    if (y < 0 || y >= 40) return;
-    int savedLeft = _io.CursorLeft, savedTop = _io.CursorTop;
-    for (int x = Math.Min(x1, x2); x <= Math.Max(x1, x2); x++)
-        if (x >= 0 && x < 40)
-            _loRes[x, y] = (byte)(_loResColor & 0xF);
-    RenderLoResRow(y / 2);
-    try { _io.SetCursorPosition(savedLeft, savedTop); } catch { }
-}
-
-// Executes VLIN y1,y2 AT x: draw a vertical line from y1 to y2 at column x.
-private void ExecuteVlin()
-{
-    _tokenPos++;
-    _evaluator.Init(_currentTokens, _tokenPos);
-    int y1 = (int)_evaluator.Evaluate().NumberValue;
-    _tokenPos = _evaluator.Position;
-
-    if (CurrentToken.Type != TokenType.Comma)
-        throw new BasicException("?SYNTAX ERROR");
-    _tokenPos++;
-
-    _evaluator.Init(_currentTokens, _tokenPos);
-    int y2 = (int)_evaluator.Evaluate().NumberValue;
-    _tokenPos = _evaluator.Position;
-
-    if (CurrentToken.Type != TokenType.AT)
-        throw new BasicException("?SYNTAX ERROR: EXPECTED AT");
-    _tokenPos++;
-
-    _evaluator.Init(_currentTokens, _tokenPos);
-    int x = (int)_evaluator.Evaluate().NumberValue;
-    _tokenPos = _evaluator.Position;
-
-    if (x < 0 || x >= 40) return;
-    int savedLeft = _io.CursorLeft, savedTop = _io.CursorTop;
-    int lo = Math.Max(0, Math.Min(y1, y2));
-    int hi = Math.Min(39, Math.Max(y1, y2));
-    for (int y = lo; y <= hi; y++)
-        _loRes[x, y] = (byte)(_loResColor & 0xF);
-    for (int r = lo / 2; r <= hi / 2; r++)
-        RenderLoResRow(r);
-    try { _io.SetCursorPosition(savedLeft, savedTop); } catch { }
 }
 
 // Executes the DEL statement, deleting program lines in a range.

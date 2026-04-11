@@ -55,13 +55,10 @@ app.MapPost("/api/session", (SessionStore sessions) =>
     return Results.Ok(new { sessionId = session.Id });
 });
 
-app.MapPost("/api/session/{sessionId}/reset", (string sessionId, SessionStore sessions) =>
+app.MapPost("/api/session/{sessionId}/reset", async (string sessionId, SessionStore sessions) =>
 {
     var session = sessions.GetOrCreate(sessionId);
-    lock (session.Gate)
-    {
-        session.Reset();
-    }
+    await session.ResetAsync();
 
     return Results.Ok(new { sessionId = session.Id, reset = true });
 });
@@ -122,6 +119,12 @@ static class EmulatorCommandRunner
         if (trimmedInput.Equals("QUIT", StringComparison.OrdinalIgnoreCase) ||
             trimmedInput.Equals("EXIT", StringComparison.OrdinalIgnoreCase))
         {
+            return;
+        }
+
+        if (trimmedInput.Equals("HELP", StringComparison.OrdinalIgnoreCase))
+        {
+            interpreter.PrintHelp();
             return;
         }
 
@@ -218,10 +221,31 @@ sealed class EmulatorSession
     public Task? ActiveExecution { get; set; }
     public StreamingRuntimeIO? StreamingIO { get; set; }
 
-    public void Reset()
+    public async Task ResetAsync()
     {
-        StreamingIO = null;
-        ActiveExecution = null;
-        Interpreter = new Interpreter(new BufferedRuntimeIO(), DiskPath);
+        Task? activeExecution;
+        StreamingRuntimeIO? streamingIo;
+
+        lock (Gate)
+        {
+            Interpreter.RequestStop();
+            activeExecution = ActiveExecution;
+            streamingIo = StreamingIO;
+        }
+
+        // Unblock pending INPUT/GET so a running loop can observe stop request quickly.
+        streamingIo?.TrySubmitInput(string.Empty);
+
+        if (activeExecution is { IsCompleted: false })
+        {
+            await Task.WhenAny(activeExecution, Task.Delay(1000));
+        }
+
+        lock (Gate)
+        {
+            StreamingIO = null;
+            ActiveExecution = null;
+            Interpreter = new Interpreter(new BufferedRuntimeIO(), DiskPath);
+        }
     }
 }

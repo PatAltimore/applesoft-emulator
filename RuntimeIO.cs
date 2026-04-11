@@ -126,8 +126,23 @@ public sealed class BufferedRuntimeIO : IRuntimeIO
 
     public void SetCursorPosition(int left, int top)
     {
-        CursorLeft = Math.Max(0, left);
-        CursorTop = Math.Max(0, top);
+        int targetLeft = Math.Max(0, left);
+        int targetTop = Math.Max(0, top);
+
+        // Buffered output has no true cursor movement; when the cursor advances
+        // to a lower row, emit newlines so blank PRINT lines are visible.
+        if (targetTop > CursorTop)
+        {
+            Write(new string('\n', targetTop - CursorTop));
+            if (targetLeft > 0)
+            {
+                Write(new string(' ', targetLeft));
+            }
+            return;
+        }
+
+        CursorLeft = targetLeft;
+        CursorTop = targetTop;
     }
 
     public void Clear()
@@ -242,8 +257,23 @@ public sealed class StreamingRuntimeIO : IRuntimeIO
 
     public void SetCursorPosition(int left, int top)
     {
-        CursorLeft = Math.Max(0, left);
-        CursorTop = Math.Max(0, top);
+        int targetLeft = Math.Max(0, left);
+        int targetTop = Math.Max(0, top);
+
+        // Streamed web output has no real cursor addressing; represent downward
+        // cursor movement as newlines so PRINT "" advances to the next line.
+        if (targetTop > CursorTop)
+        {
+            Write(new string('\n', targetTop - CursorTop));
+            if (targetLeft > 0)
+            {
+                Write(new string(' ', targetLeft));
+            }
+            return;
+        }
+
+        CursorLeft = targetLeft;
+        CursorTop = targetTop;
     }
 
     public void Clear()
