@@ -350,22 +350,17 @@ async function executeCommand(command) {
   }
 }
 
-commandForm.addEventListener('submit', async event => {
-  event.preventDefault();
-  const command = commandInput.value;
-  commandInput.value = '';
-
-  try {
-    await executeCommand(command);
-  } catch (error) {
-    appendOutput(`?ERROR: ${error.message}`);
-  }
-});
-
-commandInput.addEventListener('keydown', event => {
+commandInput.addEventListener('keydown', async event => {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault();
-    commandForm.requestSubmit();
+    const command = commandInput.value;
+    commandInput.value = '';
+
+    try {
+      await executeCommand(command);
+    } catch (error) {
+      appendOutput(`?ERROR: ${error.message}`);
+    }
   }
 
   if (event.key === 'ArrowUp') {
