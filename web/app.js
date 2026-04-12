@@ -346,8 +346,12 @@ async function executeCommand(command) {
     }
 
     if (result?.awaitingInput) {
-      currentPromptIsKeyInput = false;
-      setRuntimeHint('Program is waiting for input. Type your answer and press SEND.', 'warning');
+      currentPromptIsKeyInput = !!result.isKeyInput;
+      if (currentPromptIsKeyInput) {
+        setRuntimeHint('Program is waiting for a key. Enter a single character and press SEND.', 'key');
+      } else {
+        setRuntimeHint('Program is waiting for input. Type your answer and press SEND.', 'warning');
+      }
       commandInput.focus();
     } else {
       currentPromptIsKeyInput = false;
