@@ -274,6 +274,11 @@
       let inString = false;
       let current = "";
 
+      // REM lines are entirely comments — never split on colons
+      if (/^REM\b/i.test(line.trimStart())) {
+        return [line];
+      }
+
       for (let i = 0; i < line.length; i += 1) {
         const ch = line[i];
         if (ch === '"') {
@@ -521,6 +526,7 @@
     parsePrintItems(body) {
       const items = [];
       let inString = false;
+      let parenDepth = 0;
       let current = "";
 
       for (let i = 0; i < body.length; i += 1) {
@@ -531,7 +537,15 @@
           continue;
         }
 
-        if ((ch === ';' || ch === ',') && !inString) {
+        if (!inString) {
+          if (ch === '(') {
+            parenDepth += 1;
+          } else if (ch === ')') {
+            parenDepth -= 1;
+          }
+        }
+
+        if ((ch === ';' || ch === ',') && !inString && parenDepth === 0) {
           items.push({ expr: current.trim(), sep: ch });
           current = "";
           continue;
