@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Applesoft Network Terminal</title>
+  <title>Applesoft BASIC Interpreter</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@400;700&family=VT323&display=swap" rel="stylesheet">
@@ -17,8 +17,8 @@
   <div class="page-shell">
     <header class="masthead">
       <div>
-        <p class="eyebrow">1983 REMOTE COMPUTER CLUB</p>
-        <h1>APPLE ][ NETWORK TERMINAL</h1>
+        <p class="eyebrow">APPLE ][ COMPUTER</p>
+        <h1>APPLESOFT BASIC INTERPRETER</h1>
       </div>
       <div class="status-lights" aria-label="System status">
         <span class="light light-red"></span>
@@ -30,40 +30,11 @@
     <main class="console-layout">
       <aside class="control-panel panel">
         <section>
-          <h2>System</h2>
-          <dl class="telemetry">
-            <div>
-              <dt>Link</dt>
-              <dd id="api-status">Checking...</dd>
-            </div>
-            <div>
-              <dt>Session</dt>
-              <dd id="session-id">OFFLINE</dd>
-            </div>
-            <div>
-              <dt>Backend</dt>
-              <dd id="api-base-url" class="tiny"></dd>
-            </div>
-          </dl>
-        </section>
-
-
-
-        <section>
           <h2>Power</h2>
           <div class="button-grid">
-            <button type="button" id="new-session">NEW SESSION</button>
-            <button type="button" id="reset-session">RESET</button>
             <button type="button" id="clear-screen">CLEAR CRT</button>
-          </div>
-        </section>
-
-        <section>
-          <h2>History</h2>
-          <div class="button-grid">
             <button type="button" id="clear-history">CLEAR HISTORY</button>
           </div>
-          <ul id="history-list" class="list-pane" aria-label="Command history"></ul>
         </section>
       </aside>
 
@@ -75,7 +46,6 @@
               <div id="runtime-hint" class="runtime-hint" role="status" aria-live="polite"></div>
               <label class="prompt" for="command-input">]</label>
               <textarea id="command-input" rows="2" spellcheck="false" placeholder='10 PRINT "HELLO"'></textarea>
-              <button type="submit">SEND</button>
             </form>
           </div>
         </div>

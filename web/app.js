@@ -1,17 +1,10 @@
 const config = window.APP_CONFIG ?? {};
-const apiBaseUrl = (config.apiBaseUrl ?? window.location.origin).replace(/\/$/, '');
 
 const outputEl = document.getElementById('output');
 const commandForm = document.getElementById('command-form');
 const commandInput = document.getElementById('command-input');
-const sessionIdEl = document.getElementById('session-id');
-const apiStatusEl = document.getElementById('api-status');
-const apiBaseUrlEl = document.getElementById('api-base-url');
-const newSessionButton = document.getElementById('new-session');
-const resetSessionButton = document.getElementById('reset-session');
 const clearScreenButton = document.getElementById('clear-screen');
 const clearHistoryButton = document.getElementById('clear-history');
-const historyListEl = document.getElementById('history-list');
 const runtimeHintEl = document.getElementById('runtime-hint');
 const useBrowserRuntime = config.useBrowserRuntime !== false;
 const localRuntime = useBrowserRuntime && window.LocalApplesoftRuntime
@@ -37,11 +30,6 @@ const outputStyleState = {
   inverse: false,
   flash: false
 };
-
-// apiBaseUrlEl will be set in checkHealth() based on runtime mode
-if (!useBrowserRuntime) {
-  apiBaseUrlEl.textContent = apiBaseUrl;
-}
 
 function appendOutput(text = '') {
   appendOutputChunk(`${text}\n`);
@@ -138,7 +126,6 @@ function setRuntimeHint(message, kind) {
 
 function setSession(id) {
   sessionId = id;
-  sessionIdEl.textContent = id ?? 'OFFLINE';
 
   if (!useBrowserRuntime && hubReady && sessionId) {
     hubConnection.invoke('AttachSession', sessionId).catch(error => {
@@ -152,28 +139,7 @@ function persistHistory() {
 }
 
 function renderHistory() {
-  historyListEl.innerHTML = '';
-
-  if (commandHistory.length === 0) {
-    const empty = document.createElement('li');
-    empty.className = 'empty';
-    empty.textContent = 'No command history yet.';
-    historyListEl.appendChild(empty);
-    return;
-  }
-
-  [...commandHistory].reverse().slice(0, 20).forEach(command => {
-    const li = document.createElement('li');
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = command;
-    button.addEventListener('click', () => {
-      commandInput.value = command;
-      commandInput.focus();
-    });
-    li.appendChild(button);
-    historyListEl.appendChild(li);
-  });
+  // History panel removed from UI; users navigate history with arrow keys
 }
 
 function rememberCommand(command) {
@@ -275,19 +241,7 @@ async function initializeHub() {
 }
 
 async function checkHealth() {
-  if (useBrowserRuntime) {
-    apiStatusEl.textContent = 'BROWSER ✓';
-    apiBaseUrlEl.textContent = 'Browser interpreter (no backend)';
-    return;
-  }
-
-  try {
-    const health = await apiRequest('/health', { method: 'GET' });
-    apiStatusEl.textContent = health.status?.toUpperCase() ?? 'OK';
-  } catch (error) {
-    apiStatusEl.textContent = 'OFFLINE';
-    appendOutput(`?NETWORK ERROR: ${error.message}`);
-  }
+  // Health check no longer needed in browser-only mode
 }
 
 async function createSession() {
@@ -431,25 +385,6 @@ commandInput.addEventListener('keydown', event => {
       historyCursor = commandHistory.length;
       commandInput.value = '';
     }
-  }
-});
-
-newSessionButton.addEventListener('click', async () => {
-  try {
-    await createSession();
-  } catch (error) {
-    appendOutput(`?ERROR: ${error.message}`);
-  }
-});
-
-resetSessionButton.addEventListener('click', async () => {
-  replaceOutput('APPLE ][ ONLINE\nREMOTE BASIC SUBSYSTEM\n');
-  clearRuntimeHint();
-
-  try {
-    await resetSession();
-  } catch (error) {
-    appendOutput(`?ERROR: ${error.message}`);
   }
 });
 
