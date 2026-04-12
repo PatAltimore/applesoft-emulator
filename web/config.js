@@ -1,3 +1,5 @@
 window.APP_CONFIG = {
-  apiBaseUrl: 'https://app-apple-bvpprvy3safqa.azurewebsites.net'
+  // Browser-native interpreter - no backend API needed
+  useBrowserRuntime: true
+  // apiBaseUrl removed - using static web app with local interpreter only
 };

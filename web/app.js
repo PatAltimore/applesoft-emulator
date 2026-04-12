@@ -18,6 +18,13 @@ const localRuntime = useBrowserRuntime && window.LocalApplesoftRuntime
   ? new window.LocalApplesoftRuntime()
   : null;
 
+console.log('[APPLESOFT] Runtime Configuration:', {
+  useBrowserRuntime,
+  hasLocalApplesoftRuntime: !!window.LocalApplesoftRuntime,
+  localRuntimeCreated: !!localRuntime,
+  apiBaseUrl
+});
+
 let sessionId = null;
 let currentPromptIsKeyInput = false;
 const historyStorageKey = 'applesoft-history';
@@ -31,7 +38,10 @@ const outputStyleState = {
   flash: false
 };
 
-apiBaseUrlEl.textContent = apiBaseUrl;
+// apiBaseUrlEl will be set in checkHealth() based on runtime mode
+if (!useBrowserRuntime) {
+  apiBaseUrlEl.textContent = apiBaseUrl;
+}
 
 function appendOutput(text = '') {
   appendOutputChunk(`${text}\n`);
@@ -266,7 +276,8 @@ async function initializeHub() {
 
 async function checkHealth() {
   if (useBrowserRuntime) {
-    apiStatusEl.textContent = 'LOCAL';
+    apiStatusEl.textContent = 'BROWSER ✓';
+    apiBaseUrlEl.textContent = 'Browser interpreter (no backend)';
     return;
   }
 
