@@ -414,7 +414,9 @@
                 }
                 
                 // Build the complete f.ARR(...) expression as a single string
-                const arrCall = `f.ARR(${JSON.stringify(upper)},${argStrings.join(",")})`;
+                // Recursively transform each argument so nested arrays like L(I) become f.ARR("L",v("I"))
+                const transformedArgs = argStrings.map(arg => this.transformExpression(session, arg));
+                const arrCall = `f.ARR(${JSON.stringify(upper)},${transformedArgs.join(",")})`;
                 transformed.push(arrCall);
               } else {
                 // Malformed array access, just treat as variable
@@ -635,6 +637,12 @@
           return { awaitingInput: false, isKeyInput: false };
         }
 
+        if (action.type === "next-line") {
+          exec.linePos += 1;
+          exec.stmtPos = 0;
+          continue;
+        }
+
         exec.stmtPos += 1;
       }
 
@@ -647,14 +655,28 @@
 
     parseInputTarget(stmt, keyword) {
       const rest = stmt.slice(keyword.length).trim();
-      const promptMatch = rest.match(/^"([^"]*)"\s*;\s*([A-Z][A-Z0-9$]*)$/i);
-      if (promptMatch) {
-        return { prompt: `${promptMatch[1]}? `, variable: promptMatch[2].toUpperCase() };
+
+      let prompt = "? ";
+      let varPart = rest;
+
+      // Optional prompt string followed by ; or ,
+      // Semicolon: append "? " to prompt. Comma: use prompt string as-is.
+      const promptStrMatch = rest.match(/^"([^"]*)"\s*(;|,)\s*(.+)$/i);
+      if (promptStrMatch) {
+        prompt = promptStrMatch[2] === ";" ? `${promptStrMatch[1]}? ` : promptStrMatch[1];
+        varPart = promptStrMatch[3].trim();
       }
 
-      const plain = rest.match(/^([A-Z][A-Z0-9$]*)$/i);
+      // Array element target: VAR(indices)
+      const arrayMatch = varPart.match(/^([A-Z][A-Z0-9$]*)\s*\((.+)\)$/i);
+      if (arrayMatch) {
+        return { prompt, variable: arrayMatch[1].toUpperCase(), arrayIndicesExpr: arrayMatch[2].trim() };
+      }
+
+      // Simple variable
+      const plain = varPart.match(/^([A-Z][A-Z0-9$]*)$/i);
       if (plain) {
-        return { prompt: "? ", variable: plain[1].toUpperCase() };
+        return { prompt, variable: plain[1].toUpperCase(), arrayIndicesExpr: null };
       }
 
       return null;
@@ -797,7 +819,17 @@
         this.write(session, target.prompt);
         session.awaitingInput = { isKeyInput: false, prompt: target.prompt };
         session.pendingInputApply = input => {
-          this.applyInputValue(session, target.variable, input, false);
+          if (target.arrayIndicesExpr) {
+            const indices = target.arrayIndicesExpr.split(/\s*,\s*/).map(idx => Number(this.evaluateExpression(session, idx)));
+            const key = indices.join(",");
+            if (!session.vars[target.variable]) {
+              session.vars[target.variable] = {};
+            }
+            const raw = String(input ?? "");
+            session.vars[target.variable][key] = target.variable.endsWith("$") ? raw : (Number.isNaN(Number(raw)) ? 0 : Number(raw));
+          } else {
+            this.applyInputValue(session, target.variable, input, false);
+          }
           this.writeln(session, String(input ?? ""));
         };
         return { type: "await-input", isKeyInput: false };
@@ -825,7 +857,7 @@
         }
 
         if (!this.evaluateCondition(session, m[1])) {
-          return { type: "next" };
+          return { type: "next-line" };
         }
 
         const thenPart = m[2].trim();
