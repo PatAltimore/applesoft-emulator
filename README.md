@@ -1,6 +1,6 @@
 # Applesoft BASIC Emulator
 
-A C# Applesoft BASIC emulator for Apple ][ style programs, now exposed as a web API so it can be hosted on Azure App Service.
+A browser-based Applesoft BASIC emulator for Apple ][ style programs. The entire interpreter runs in your web browser using JavaScript—no backend server required. Programs are saved to your browser's IndexedDB storage.
 
 ```
                 APPLESOFT BASIC EMULATOR
@@ -15,118 +15,68 @@ HELLO, WORLD!
 
 ## Getting Started
 
-### Prerequisites
+### Online (Recommended)
 
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) or later
+Open the live emulator at: **[ashy-wave-08690e81e.2.azurestaticapps.net](https://ashy-wave-08690e81e.2.azurestaticapps.net)**
 
-### Build & Run
+Your programs are saved automatically to your browser's local storage.
 
-```bash
-dotnet build
-dotnet run
-```
+### Local Development
 
-The app starts an HTTP API on `http://localhost:5000` by default.
-
-Health check:
-
-```bash
-curl -s http://localhost:5000/health
-```
-
-## Retro Frontend
-
-The repo also includes a retro browser frontend in `web/` designed to feel like an Apple II terminal session while talking to the deployed emulator API.
-
-To preview it locally with a simple static file server:
+To run the emulator locally:
 
 ```bash
 cd web
 python -m http.server 5500
 ```
 
-Then open `http://localhost:5500`.
+Then open `http://localhost:5500` in your browser.
 
-The frontend reads its backend endpoint from `web/config.js`.
+The interpreter runs entirely in the browser—no backend API is required.
 
-Frontend extras:
+## Browser-Native Architecture
 
-- Disk browser: `SCAN DISK` discovers programs from `CATALOG`; select one and use `LOAD SELECTED` / `RUN SELECTED`.
-- Command history: previous commands are saved in browser storage and can be recalled with arrow up/down.
+- **Interpreter Engine:** Full Applesoft interpreter implemented in JavaScript (web/runtime/local-emulator.js)
+- **Persistence:** Programs saved to IndexedDB with automatic seeding of bundled programs
+- **No Backend Required:** Static web app hosted on Azure Static Web Apps; zero server-side execution
+- **Interactive I/O:** INPUT and GET statements pause execution and resume on user submit without restarting
+- **Offline Ready:** Bundled programs available offline; SAVE/LOAD work entirely in-browser
 
-## API Quick Start
+## Storage & Data
 
-### 1) Create a session
+### Program Storage
 
-```bash
-curl -s -X POST http://localhost:5000/api/session
-```
+Programs are saved to your browser's IndexedDB under the key `programs` with the program name as the index. IndexedDB provides unlimited local storage (up to your browser's quota, typically 50GB per site).
 
-### 2) Store program lines
+### Clearing Local Data
 
-```bash
-curl -s -X POST http://localhost:5000/api/session/<sessionId>/execute \
-      -H "Content-Type: application/json" \
-      -d '{"command":"10 PRINT \"HELLO\""}'
-```
+To reset all programs and variables, clear your browser's site data:
+1. Press F12 to open Developer Tools
+2. Go to **Application** → **Storage**
+3. Click **Clear site data**
 
-### 3) Run the program
+Or use the in-emulator `NEW` command to clear the current program and variables (but keep saved programs intact).
 
-```bash
-curl -s -X POST http://localhost:5000/api/session/<sessionId>/execute \
-      -H "Content-Type: application/json" \
-      -d '{"command":"RUN"}'
-```
+## Command Reference
 
-### 4) Reset a session
+### Direct-Mode Commands
 
-```bash
-curl -s -X POST http://localhost:5000/api/session/<sessionId>/reset
-```
+Type these commands at the prompt (preceded by `]`) to control the emulator:
 
-## API Endpoints
-
-| Method | Route | Purpose |
-|---|---|---|
-| `GET` | `/health` | Basic health probe |
-| `POST` | `/api/session` | Create a new emulator session |
-| `POST` | `/api/session/{sessionId}/execute` | Run one command in an existing session |
-| `POST` | `/api/session/{sessionId}/reset` | Reset interpreter state for a session |
-
-## Azure Hosting
-
-- API: Azure App Service
-- Frontend: Azure Static Web Apps Free
-
-The API is configured to allow the Static Web App origin and common local development origins via CORS.
-
-### Static Web Apps GitHub Secret
-
-The workflow in `.github/workflows/azure-static-web-app.yml` expects repository secret `AZURE_STATIC_WEB_APPS_API_TOKEN`.
-
-After authenticating GitHub CLI (`gh auth login`), set the secret with:
-
-```bash
-./scripts/set-swa-secret.sh
-```
-
-You can also pass explicit values:
-
-```bash
-./scripts/set-swa-secret.sh <owner/repo> <resource-group> <static-web-app-name>
-```
-
-`/execute` request payload:
-
-```json
-{
-      "command": "INPUT \"N\";A:PRINT A",
-      "inputs": ["7"],
-      "keyInputs": "Y"
-}
-```
-
-## BASIC Usage
+| Command           | Description                          |
+|-------------------|--------------------------------------|
+| `RUN`             | Run the current program              |
+| `RUN 100`         | Run starting from line 100           |
+| `LIST`            | List the entire program              |
+| `LIST 10`         | List line 10                         |
+| `LIST 10,50`      | List lines 10 through 50             |
+| `NEW`             | Clear the program and all variables  |
+| `SAVE "MYPROG"`   | Save the program to browser storage  |
+| `LOAD "MYPROG"`   | Load a program from browser storage  |
+| `CATALOG`         | List all saved programs              |
+| `DEL 10,50`       | Delete lines 10 through 50           |
+| `HELP`            | Show this command summary            |
+| `QUIT` / `EXIT`   | Close the emulator session           |
 
 ### Entering a Program
 
@@ -145,21 +95,23 @@ Type lines with line numbers to store them. Lines are automatically sorted by nu
 - **Delete a line:** Type just the line number with nothing after it
 - **Delete a range:** `DEL 20,40`
 
-### Direct-Mode Commands
+## Interactive Input/Output
 
-| Command           | Description                          |
-|-------------------|--------------------------------------|
-| `RUN`             | Run the current program              |
-| `RUN 100`         | Run starting from line 100           |
-| `LIST`            | List the entire program              |
-| `LIST 10`         | List line 10                         |
-| `LIST 10,50`      | List lines 10 through 50             |
-| `NEW`             | Clear the program and all variables  |
-| `SAVE "MYPROG"` | Save the program to the disk folder    |
-| `LOAD "MYPROG"` | Load a program from the disk folder    |
-| `CATALOG`        | List all programs in the disk folder   |
-| `DEL 10,50`       | Delete lines 10 through 50           |
-| `QUIT` / `EXIT`   | Exit the emulator                    |
+**INPUT:** Pauses execution and prompts for a line of text. Execution resumes after you type your input and press Enter.
+
+```
+]10 INPUT "What is your name? ";NAME$
+]20 PRINT "Hello, ";NAME$
+```
+
+**GET:** Pauses execution and waits for a single keypress. Useful for games like WUMPUS.
+
+```
+]10 GET C$
+]20 PRINT "You pressed: ";C$
+```
+
+Both INPUT and GET work interactively in the browser—you can pause mid-program, provide input, and the program continues without restarting.
 
 ## Supported BASIC Statements
 
