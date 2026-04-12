@@ -367,9 +367,59 @@
           };
 
           const next = tokens[i + 1];
-          if (next === "(" && fnMap[upper]) {
-            transformed.push(`f.${fnMap[upper]}`);
-            continue;
+          if (next === "(") {
+            if (fnMap[upper]) {
+              // Built-in function
+              transformed.push(`f.${fnMap[upper]}`);
+              continue;
+            } else {
+              // User-defined array: collect arguments and convert to f.ARR("ARRAYNAME", arg1, arg2, ...)
+              let parenDepth = 0;
+              let argStart = i + 2;  // Start after the opening paren
+              let argEnd = argStart;
+              let foundCloseParen = false;
+              
+              for (let j = i + 1; j < tokens.length; j += 1) {
+                if (tokens[j] === "(") {
+                  parenDepth += 1;
+                } else if (tokens[j] === ")") {
+                  parenDepth -= 1;
+                  if (parenDepth === 0) {
+                    argEnd = j;
+                    foundCloseParen = true;
+                    i = j;  // Skip to the closing paren
+                    break;
+                  }
+                }
+              }
+              
+              if (foundCloseParen && argEnd > argStart) {
+                // Extract the arguments (between parens)
+                const argTokens = tokens.slice(argStart, argEnd);
+                transformed.push(`f.ARR(${JSON.stringify(upper)}`);
+                
+                // Add arguments
+                let arg = "";
+                for (const argToken of argTokens) {
+                  if (argToken === ",") {
+                    if (arg.trim()) {
+                      transformed.push(`,${arg.trim()}`);
+                    }
+                    arg = "";
+                  } else {
+                    arg += argToken;
+                  }
+                }
+                if (arg.trim()) {
+                  transformed.push(`,${arg.trim()}`);
+                }
+                transformed.push(")");
+              } else {
+                // Malformed array access, just treat as variable
+                transformed.push(`v(${JSON.stringify(upper)})`);
+              }
+              continue;
+            }
           }
 
           transformed.push(`v(${JSON.stringify(upper)})`);
@@ -412,6 +462,15 @@
             return text.slice(offset);
           }
           return text.slice(offset, offset + Math.max(0, Number(n) || 0));
+        },
+        ARR: (arrayName, ...indices) => {
+          const arr = session.vars[arrayName];
+          if (!arr || typeof arr !== "object") {
+            return 0;
+          }
+          const key = indices.join(",");
+          const val = arr[key];
+          return val === undefined ? 0 : val;
         }
       };
 
@@ -638,6 +697,60 @@
         return { type: "next" };
       }
 
+      if (/^DIM\b/i.test(stmt)) {
+        // DIM A(10), B$(5) - declare arrays
+        // In JavaScript, we don't need to pre-allocate arrays, they grow dynamically
+        // Just parse and validate the syntax, then continue
+        const dimPart = stmt.replace(/^DIM\s+/i, "").trim();
+        const arraySpecs = dimPart.split(/\s*,\s*/);
+        for (const spec of arraySpecs) {
+          const m = spec.match(/^([A-Z][A-Z0-9$]*)\s*\(\s*(\d+)\s*(?:,\s*(\d+))?\s*\)$/i);
+          if (!m) {
+            this.writeln(session, "?SYNTAX ERROR");
+            return { type: "next" };
+          }
+          // Validate the array name exists in session.vars (auto-initialize as empty array if needed)
+          const arrayName = m[1].toUpperCase();
+          if (!session.vars[arrayName]) {
+            session.vars[arrayName] = {};
+          }
+        }
+        return { type: "next" };
+      }
+
+      if (/^VTAB\b/i.test(stmt)) {
+        const m = stmt.match(/^VTAB\s+(.+)$/i);
+        if (!m) {
+          this.writeln(session, "?SYNTAX ERROR");
+          return { type: "next" };
+        }
+        // VTAB moves cursor to row N (1-24 on Apple II)
+        // In browser, we can't move cursor back, so just add newlines to approximate
+        const row = Number(this.evaluateExpression(session, m[1]));
+        if (!Number.isNaN(row) && row > 0) {
+          // Move down by adding newlines. Count current position approximately.
+          // For simplicity, just add a newline - proper implementation would track cursor position
+          this.writeln(session, "");
+        }
+        return { type: "next" };
+      }
+
+      if (/^HTAB\b/i.test(stmt)) {
+        const m = stmt.match(/^HTAB\s+(.+)$/i);
+        if (!m) {
+          this.writeln(session, "?SYNTAX ERROR");
+          return { type: "next" };
+        }
+        // HTAB moves cursor to column N (1-40 on Apple II)
+        // In browser, we can approximate with spaces
+        const col = Number(this.evaluateExpression(session, m[1]));
+        if (!Number.isNaN(col) && col > 0) {
+          // Add spaces to move cursor right
+          this.write(session, " ".repeat(Math.max(0, col - 1)));
+        }
+        return { type: "next" };
+      }
+
       if (/^PRINT\b/i.test(stmt) || /^\?/i.test(stmt)) {
         const body = stmt.replace(/^PRINT\b/i, "").replace(/^\?/, "").trim();
         if (!body) {
@@ -799,8 +912,28 @@
         return { type: "jump", line: exec.lines[frame.linePos], stmtPos: frame.stmtPos };
       }
 
-      if (/^(LET\b|[A-Z][A-Z0-9$]*\s*=)/i.test(stmt)) {
+      if (/^(LET\b|[A-Z][A-Z0-9$]*\s*(?:=|\())/i.test(stmt)) {
         const assign = stmt.replace(/^LET\s+/i, "");
+        
+        // Handle both simple assignment (A = 5) and array assignment (C(1,1) = 5)
+        const arrayMatch = assign.match(/^([A-Z][A-Z0-9$]*)\s*\(\s*(.+?)\s*\)\s*=\s*(.+)$/i);
+        if (arrayMatch) {
+          // Array assignment: C(1,1) = 5
+          const arrayName = arrayMatch[1].toUpperCase();
+          const indices = arrayMatch[2].split(/\s*,\s*/).map(idx => Number(this.evaluateExpression(session, idx)));
+          const value = this.evaluateExpression(session, arrayMatch[3]);
+          
+          // Initialize array if needed
+          if (!session.vars[arrayName]) {
+            session.vars[arrayName] = {};
+          }
+          
+          // Use index string as key: "1,1" for C(1,1)
+          const key = indices.join(",");
+          session.vars[arrayName][key] = value;
+          return { type: "next" };
+        }
+        
         const m = assign.match(/^([A-Z][A-Z0-9$]*)\s*=\s*(.+)$/i);
         if (!m) {
           this.writeln(session, "?SYNTAX ERROR");
@@ -843,7 +976,9 @@
         this.writeln(session, "  SAVE \"NAME\"     SAVE PROGRAM TO BROWSER DISK");
         this.writeln(session, "  CATALOG         LIST PROGRAMS ON BROWSER DISK");
         this.writeln(session, "  DEL N or A,B    DELETE LINE(S)");
-        this.writeln(session, "  NORMAL|INVERSE|FLASH TEXT MODES");
+        this.writeln(session, "SUPPORTED STATEMENTS (in programs):");
+        this.writeln(session, "  DIM, INPUT, GET, PRINT, IF/THEN, GOTO, GOSUB/RETURN");
+        this.writeln(session, "  FOR/NEXT, HOME, VTAB, HTAB, NORMAL, INVERSE, FLASH");
         return { output: this.flushOutput(session), awaitingInput: false, isKeyInput: false };
       }
 
