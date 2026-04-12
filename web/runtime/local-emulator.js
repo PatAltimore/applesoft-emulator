@@ -984,6 +984,11 @@
     }
 
     async continueAfterInput(session) {
+      // Advance past the INPUT/GET statement that paused execution.
+      const exec = session.execution;
+      if (exec) {
+        exec.stmtPos += 1;
+      }
       const runResult = await this.runProgram(session);
       return {
         output: this.flushOutput(session),
