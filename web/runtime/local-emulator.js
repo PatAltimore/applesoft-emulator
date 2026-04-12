@@ -394,26 +394,28 @@
               }
               
               if (foundCloseParen && argEnd > argStart) {
-                // Extract the arguments (between parens)
+                // Extract the arguments (between parens) and build the ARR call
                 const argTokens = tokens.slice(argStart, argEnd);
-                transformed.push(`f.ARR(${JSON.stringify(upper)}`);
+                const argStrings = [];
+                let currentArg = [];
                 
-                // Add arguments
-                let arg = "";
                 for (const argToken of argTokens) {
                   if (argToken === ",") {
-                    if (arg.trim()) {
-                      transformed.push(`,${arg.trim()}`);
+                    if (currentArg.length > 0) {
+                      argStrings.push(currentArg.join(""));
+                      currentArg = [];
                     }
-                    arg = "";
                   } else {
-                    arg += argToken;
+                    currentArg.push(argToken);
                   }
                 }
-                if (arg.trim()) {
-                  transformed.push(`,${arg.trim()}`);
+                if (currentArg.length > 0) {
+                  argStrings.push(currentArg.join(""));
                 }
-                transformed.push(")");
+                
+                // Build the complete f.ARR(...) expression as a single string
+                const arrCall = `f.ARR(${JSON.stringify(upper)},${argStrings.join(",")})`;
+                transformed.push(arrCall);
               } else {
                 // Malformed array access, just treat as variable
                 transformed.push(`v(${JSON.stringify(upper)})`);
