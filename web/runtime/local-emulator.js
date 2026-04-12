@@ -835,6 +835,7 @@
       if (/^HELP$/i.test(trimmedInput)) {
         this.writeln(session, "SUPPORTED COMMANDS:");
         this.writeln(session, "  HELP            SHOW THIS HELP");
+        this.writeln(session, "  HOME            CLEAR SCREEN");
         this.writeln(session, "  RUN             RUN PROGRAM");
         this.writeln(session, "  LIST            LIST PROGRAM LINES");
         this.writeln(session, "  NEW             CLEAR PROGRAM");

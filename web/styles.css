@@ -384,6 +384,8 @@ textarea {
   text-shadow: 0 0 10px rgba(145, 255, 102, 0.5);
   position: relative;
   z-index: 2;
+  caret-color: var(--phosphor);
+  caret-shape: block;
 }
 
 textarea::placeholder {

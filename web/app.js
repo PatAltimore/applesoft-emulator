@@ -294,8 +294,8 @@ async function resetSession() {
 }
 
 async function executeCommand(command) {
-  // Handle CLR command to clear screen
-  if (command.trim().toUpperCase() === 'CLR') {
+  // Handle HOME command to clear screen
+  if (command.trim().toUpperCase() === 'HOME') {
     replaceOutput('APPLE ][ ONLINE\nBOOTING BROWSER BASIC SUBSYSTEM...\n');
     clearRuntimeHint();
     return;
@@ -419,6 +419,7 @@ document.addEventListener('keydown', event => {
 });
 
 replaceOutput('APPLE ][ ONLINE\nBOOTING BROWSER BASIC SUBSYSTEM...\n');
+commandInput.focus();
 
 if (useBrowserRuntime) {
   checkHealth()
