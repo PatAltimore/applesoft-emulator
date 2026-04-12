@@ -14,8 +14,7 @@ const localRuntime = useBrowserRuntime && window.LocalApplesoftRuntime
 console.log('[APPLESOFT] Runtime Configuration:', {
   useBrowserRuntime,
   hasLocalApplesoftRuntime: !!window.LocalApplesoftRuntime,
-  localRuntimeCreated: !!localRuntime,
-  apiBaseUrl
+  localRuntimeCreated: !!localRuntime
 });
 
 let sessionId = null;
@@ -158,6 +157,12 @@ function rememberCommand(command) {
 }
 
 async function apiRequest(path, options = {}) {
+  // Browser-only mode doesn't use the backend API
+  if (useBrowserRuntime) {
+    throw new Error('Backend API not available in browser-only mode');
+  }
+
+  const apiBaseUrl = (config.apiBaseUrl ?? window.location.origin).replace(/\/$/, '');
   const response = await fetch(`${apiBaseUrl}${path}`, {
     headers: {
       'Content-Type': 'application/json',
@@ -188,6 +193,7 @@ async function initializeHub() {
     return;
   }
 
+  const apiBaseUrl = (config.apiBaseUrl ?? window.location.origin).replace(/\/$/, '');
   hubConnection = new window.signalR.HubConnectionBuilder()
     .withUrl(`${apiBaseUrl}/hubs/emulator`)
     .withAutomaticReconnect()
