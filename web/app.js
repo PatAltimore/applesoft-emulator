@@ -204,7 +204,7 @@ async function initializeHub() {
     currentPromptIsKeyInput = !!request?.isKeyInput;
     const hint = currentPromptIsKeyInput 
       ? 'Program is waiting for a key. Enter a single character.' 
-      : 'Program is waiting for input. Type your answer and press SEND.';
+      : 'Program is waiting for input. Type your answer and press Enter.';
     const kind = currentPromptIsKeyInput ? 'key' : 'warning';
     setRuntimeHint(hint, kind);
     commandInput.focus();
@@ -315,7 +315,17 @@ async function executeCommand(command) {
       rememberCommand(command);
     }
 
-    const result = await localRuntime.execute(sessionId, command);
+    localRuntime.setOutputListener(sessionId, chunk => {
+      appendOutputChunk(chunk);
+    });
+
+    let result;
+    try {
+      result = await localRuntime.execute(sessionId, command);
+    } finally {
+      localRuntime.setOutputListener(sessionId, null);
+    }
+
     if (result?.output) {
       appendOutputChunk(result.output);
     }
@@ -323,9 +333,9 @@ async function executeCommand(command) {
     if (result?.awaitingInput) {
       currentPromptIsKeyInput = !!result.isKeyInput;
       if (currentPromptIsKeyInput) {
-        setRuntimeHint('Program is waiting for a key. Enter a single character and press SEND.', 'key');
+        setRuntimeHint('Program is waiting for a key. Enter a single character and press Enter.', 'key');
       } else {
-        setRuntimeHint('Program is waiting for input. Type your answer and press SEND.', 'warning');
+        setRuntimeHint('Program is waiting for input. Type your answer and press Enter.', 'warning');
       }
       commandInput.focus();
     } else {
@@ -391,6 +401,21 @@ commandInput.addEventListener('keydown', async event => {
       commandInput.value = '';
     }
   }
+});
+
+document.addEventListener('keydown', event => {
+  if (!(useBrowserRuntime && localRuntime && sessionId)) {
+    return;
+  }
+
+  const isBreak = event.key === 'Escape' || (event.ctrlKey && event.key.toLowerCase() === 'c');
+  if (!isBreak) {
+    return;
+  }
+
+  event.preventDefault();
+  localRuntime.requestStop(sessionId);
+  setRuntimeHint('BREAK requested...', 'warning');
 });
 
 replaceOutput('APPLE ][ ONLINE\nBOOTING BROWSER BASIC SUBSYSTEM...\n');

@@ -174,6 +174,7 @@
         awaitingInput: null,
         pendingInputApply: null,
         outputBuffer: [],
+        outputListener: null,
         forStack: [],
         gosubStack: [],
         execution: null,
@@ -233,6 +234,22 @@
       const output = session.outputBuffer.join("");
       session.outputBuffer.length = 0;
       return output;
+    }
+
+    setOutputListener(sessionId, listener) {
+      const session = this.getSession(sessionId);
+      session.outputListener = typeof listener === "function" ? listener : null;
+    }
+
+    emitBufferedOutput(session) {
+      if (!session.outputListener) {
+        return;
+      }
+
+      const chunk = this.flushOutput(session);
+      if (chunk) {
+        session.outputListener(chunk);
+      }
     }
 
     parseMaybeLineNumber(command) {
@@ -502,6 +519,8 @@
         }
 
         if (steps++ % 300 === 0) {
+          // Flush chunks while running so long loops render progressively.
+          this.emitBufferedOutput(session);
           await new Promise(resolve => setTimeout(resolve, 0));
         }
 
@@ -561,6 +580,7 @@
       session.execution = null;
       session.forStack = [];
       session.gosubStack = [];
+      this.emitBufferedOutput(session);
       return { awaitingInput: false, isKeyInput: false };
     }
 
