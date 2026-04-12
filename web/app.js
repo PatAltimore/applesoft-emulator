@@ -3,8 +3,6 @@ const config = window.APP_CONFIG ?? {};
 const outputEl = document.getElementById('output');
 const commandForm = document.getElementById('command-form');
 const commandInput = document.getElementById('command-input');
-const clearScreenButton = document.getElementById('clear-screen');
-const clearHistoryButton = document.getElementById('clear-history');
 const runtimeHintEl = document.getElementById('runtime-hint');
 const useBrowserRuntime = config.useBrowserRuntime !== false;
 const localRuntime = useBrowserRuntime && window.LocalApplesoftRuntime
@@ -150,7 +148,6 @@ function rememberCommand(command) {
   if (commandHistory[commandHistory.length - 1] !== trimmed) {
     commandHistory.push(trimmed);
     persistHistory();
-    renderHistory();
   }
 
   historyCursor = commandHistory.length;
@@ -297,6 +294,13 @@ async function resetSession() {
 }
 
 async function executeCommand(command) {
+  // Handle CLR command to clear screen
+  if (command.trim().toUpperCase() === 'CLR') {
+    replaceOutput('APPLE ][ ONLINE\nBOOTING BROWSER BASIC SUBSYSTEM...\n');
+    clearRuntimeHint();
+    return;
+  }
+
   if (!sessionId) {
     await createSession();
   }
@@ -389,21 +393,7 @@ commandInput.addEventListener('keydown', async event => {
   }
 });
 
-clearScreenButton.addEventListener('click', () => {
-  replaceOutput('APPLE ][ ONLINE\nREMOTE BASIC SUBSYSTEM\n');
-  clearRuntimeHint();
-});
-
-clearHistoryButton.addEventListener('click', () => {
-  commandHistory.length = 0;
-  historyCursor = 0;
-  persistHistory();
-  renderHistory();
-  appendOutput('COMMAND HISTORY CLEARED.');
-});
-
 replaceOutput('APPLE ][ ONLINE\nBOOTING BROWSER BASIC SUBSYSTEM...\n');
-renderHistory();
 
 if (useBrowserRuntime) {
   checkHealth()

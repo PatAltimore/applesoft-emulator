@@ -28,16 +28,6 @@
     </header>
 
     <main class="console-layout">
-      <aside class="control-panel panel">
-        <section>
-          <h2>Power</h2>
-          <div class="button-grid">
-            <button type="button" id="clear-screen">CLEAR CRT</button>
-            <button type="button" id="clear-history">CLEAR HISTORY</button>
-          </div>
-        </section>
-      </aside>
-
       <section class="crt panel" aria-label="Applesoft terminal">
         <div class="crt-bezel">
           <div class="crt-screen">
@@ -45,7 +35,7 @@
             <form id="command-form" class="command-bar">
               <div id="runtime-hint" class="runtime-hint" role="status" aria-live="polite"></div>
               <label class="prompt" for="command-input">]</label>
-              <textarea id="command-input" rows="2" spellcheck="false" placeholder='10 PRINT "HELLO"'></textarea>
+              <textarea id="command-input" rows="2" spellcheck="false"></textarea>
             </form>
           </div>
         </div>

@@ -111,9 +111,7 @@ h2 {
 }
 
 .console-layout {
-  display: grid;
-  grid-template-columns: minmax(280px, 320px) 1fr;
-  gap: 1rem;
+  display: block;
 }
 
 .panel {
@@ -268,7 +266,7 @@ button:focus-visible {
   word-break: break-word;
   font-size: clamp(1.35rem, 2vw, 1.7rem);
   line-height: 1.05;
-  text-shadow: 0 0 8px rgba(145, 255, 102, 0.3);
+  text-shadow: 0 0 10px rgba(145, 255, 102, 0.5);
   padding-right: 0.5rem;
 }
 
@@ -383,7 +381,7 @@ textarea {
   font-size: 1.6rem;
   letter-spacing: 0.02em;
   padding: 0.3rem 0 0.55rem 0;
-  text-shadow: 0 0 8px rgba(145, 255, 102, 0.3);
+  text-shadow: 0 0 10px rgba(145, 255, 102, 0.5);
   position: relative;
   z-index: 2;
 }
@@ -397,10 +395,6 @@ textarea:focus {
 }
 
 @media (max-width: 920px) {
-  .console-layout {
-    grid-template-columns: 1fr;
-  }
-
   .crt-screen {
     min-height: 56vh;
   }
