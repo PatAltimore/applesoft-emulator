@@ -74,7 +74,8 @@ Type these commands at the prompt (preceded by `]`) to control the emulator:
 | `SAVE "MYPROG"`   | Save the program to browser storage  |
 | `LOAD "MYPROG"`   | Load a program from browser storage  |
 | `CATALOG`         | List all saved programs              |
-| `DEL 10,50`       | Delete lines 10 through 50           |
+| `DEL N` or `DEL A,B` | Delete single line or range          |
+| `HOME`            | Clear the screen                     |
 | `HELP`            | Show this command summary            |
 | `QUIT` / `EXIT`   | Close the emulator session           |
 
@@ -93,7 +94,7 @@ Type lines with line numbers to store them. Lines are automatically sorted by nu
 
 - **Replace a line:** Re-enter it with the same line number
 - **Delete a line:** Type just the line number with nothing after it
-- **Delete a range:** `DEL 20,40`
+- **Delete a range:** `DEL 10` or `DEL 10,40`
 
 ## Interactive Input/Output
 
@@ -158,21 +159,12 @@ Separate statements with a colon:
 
 ### Numeric
 
-| Function  | Description                |
-|-----------|----------------------------|
-| `ABS(X)`  | Absolute value             |
-| `INT(X)`  | Floor (integer part)       |
-| `SQR(X)`  | Square root                |
-| `RND(X)`  | Random number (0 to 1)     |
-| `SGN(X)`  | Sign (-1, 0, or 1)        |
-| `SIN(X)`  | Sine                       |
-| `COS(X)`  | Cosine                     |
-| `TAN(X)`  | Tangent                    |
-| `ATN(X)`  | Arctangent                 |
-| `LOG(X)`  | Natural logarithm          |
-| `EXP(X)`  | e raised to power X        |
-| `PEEK(X)` | Read simulated memory      |
-| `POS(X)`  | Current cursor column      |
+| Function  | Description      |
+|-----------|------------------|
+| `ABS(X)`  | Absolute value   |
+| `INT(X)`  | Floor (integer part) |
+| `SQR(X)`  | Square root      |
+| `RND(X)`  | Random number (0 to 1) |
 
 ### String
 
@@ -182,7 +174,6 @@ Separate statements with a colon:
 | `LEFT$(A$,N)`     | First N characters                        |
 | `RIGHT$(A$,N)`    | Last N characters                         |
 | `MID$(A$,S,N)`    | Substring from position S, length N       |
-| `STR$(X)`         | Convert number to string                  |
 | `VAL(A$)`         | Convert string to number                  |
 | `CHR$(X)`         | Character from ASCII code                 |
 | `ASC(A$)`         | ASCII code of first character             |

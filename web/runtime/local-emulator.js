@@ -842,7 +842,7 @@
         this.writeln(session, "  LOAD \"NAME\"     LOAD PROGRAM FROM BROWSER DISK");
         this.writeln(session, "  SAVE \"NAME\"     SAVE PROGRAM TO BROWSER DISK");
         this.writeln(session, "  CATALOG         LIST PROGRAMS ON BROWSER DISK");
-        this.writeln(session, "  DEL A,B         DELETE LINE RANGE");
+        this.writeln(session, "  DEL N or A,B    DELETE LINE(S)");
         this.writeln(session, "  NORMAL|INVERSE|FLASH TEXT MODES");
         return { output: this.flushOutput(session), awaitingInput: false, isKeyInput: false };
       }
@@ -891,14 +891,14 @@
       }
 
       if (/^DEL\b/i.test(trimmedInput)) {
-        const m = trimmedInput.match(/^DEL\s+(\d+)\s*,\s*(\d+)$/i);
+        const m = trimmedInput.match(/^DEL\s+(\d+)(?:\s*,\s*(\d+))?$/i);
         if (!m) {
           this.writeln(session, "?SYNTAX ERROR");
           return { output: this.flushOutput(session), awaitingInput: false, isKeyInput: false };
         }
 
         const start = Number.parseInt(m[1], 10);
-        const end = Number.parseInt(m[2], 10);
+        const end = m[2] ? Number.parseInt(m[2], 10) : start;
         const keys = [...session.program.keys()].filter(line => line >= start && line <= end);
         keys.forEach(line => session.program.delete(line));
         return { output: "", awaitingInput: false, isKeyInput: false };

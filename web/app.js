@@ -345,13 +345,37 @@ async function executeCommand(command) {
     return;
   }
 
-  // If a program is waiting for input, submit through the live channel first.
+  // If a program is waiting for input, submit the input to the runtime.
   // This allows GET prompts like "PRESS ANY KEY" to accept Enter/blank input.
   if (runtimeHintEl.classList.contains('active')) {
-    if (hubReady) {
-      const inputToSend = currentPromptIsKeyInput
-        ? (command.length === 0 ? '\n' : command[0])
-        : command;
+    const inputToSend = currentPromptIsKeyInput
+      ? (command.length === 0 ? '\n' : command[0])
+      : command;
+
+    if (useBrowserRuntime && localRuntime) {
+      try {
+        const result = await localRuntime.execute(sessionId, inputToSend);
+        if (result?.output) {
+          appendOutputChunk(result.output);
+        }
+        if (result?.awaitingInput) {
+          currentPromptIsKeyInput = !!result.isKeyInput;
+          if (currentPromptIsKeyInput) {
+            setRuntimeHint('Program is waiting for a key. Enter a single character and press Enter.', 'key');
+          } else {
+            setRuntimeHint('Program is waiting for input. Type your answer and press Enter.', 'warning');
+          }
+          commandInput.focus();
+        } else {
+          currentPromptIsKeyInput = false;
+          clearRuntimeHint();
+        }
+      } catch (error) {
+        console.error('[APPLESOFT] Error submitting input:', error);
+        appendOutput('?ERROR');
+        clearRuntimeHint();
+      }
+    } else if (hubReady) {
       await hubConnection.invoke('SubmitInput', sessionId, inputToSend);
     }
     return;
