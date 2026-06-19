@@ -7,6 +7,7 @@ const localRuntime = window.LocalApplesoftRuntime
   : null;
 
 let sessionId = null;
+let awaitingInput = false;
 let currentPromptIsKeyInput = false;
 const historyStorageKey = 'applesoft-history';
 const commandHistory = JSON.parse(localStorage.getItem(historyStorageKey) ?? '[]');
@@ -146,8 +147,6 @@ async function executeCommand(command) {
     createSession();
   }
 
-  const awaitingInput = runtimeHintEl.classList.contains('active');
-
   // Nothing to do for an empty line unless a program is waiting for input.
   if (!command.trim() && !awaitingInput) {
     return;
@@ -175,21 +174,45 @@ async function executeCommand(command) {
   }
 
   if (result?.awaitingInput) {
+    awaitingInput = true;
     currentPromptIsKeyInput = !!result.isKeyInput;
-    setRuntimeHint(
-      currentPromptIsKeyInput
-        ? 'Program is waiting for a key. Enter a single character and press Enter.'
-        : 'Program is waiting for input. Type your answer and press Enter.',
-      currentPromptIsKeyInput ? 'key' : 'warning'
-    );
+    if (currentPromptIsKeyInput) {
+      // GET: silently wait for a single keypress at the prompt, Apple II style.
+      clearRuntimeHint();
+    } else {
+      setRuntimeHint('Program is waiting for input. Type your answer and press Enter.', 'warning');
+    }
     commandInput.focus();
   } else {
+    awaitingInput = false;
     currentPromptIsKeyInput = false;
     clearRuntimeHint();
   }
 }
 
 commandInput.addEventListener('keydown', async event => {
+  // GET: a program waiting for a key consumes the next single keypress
+  // immediately, with no Enter required (Escape/Ctrl+C still break).
+  if (awaitingInput && currentPromptIsKeyInput) {
+    let key = null;
+    if (event.key === 'Enter') {
+      key = '\r';
+    } else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey) {
+      key = event.key;
+    } else {
+      return;
+    }
+
+    event.preventDefault();
+    commandInput.value = '';
+    try {
+      await executeCommand(key);
+    } catch (error) {
+      appendOutput(`?ERROR: ${error.message}`);
+    }
+    return;
+  }
+
   if (event.key === 'Enter') {
     event.preventDefault();
     const command = commandInput.value;
