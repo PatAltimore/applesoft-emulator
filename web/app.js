@@ -253,8 +253,19 @@ document.addEventListener('keydown', event => {
   }
 
   event.preventDefault();
-  localRuntime.requestStop(sessionId);
   clearRuntimeHint();
+
+  // If the program is paused on INPUT/GET, abort the wait immediately so the
+  // break happens on this keypress without needing to press Enter first.
+  const breakText = localRuntime.abortRun(sessionId);
+  if (breakText) {
+    appendOutputChunk(breakText);
+  }
+  if (awaitingInput) {
+    awaitingInput = false;
+    currentPromptIsKeyInput = false;
+    commandInput.value = '';
+  }
 });
 
 // Clicking anywhere on the screen focuses the prompt, like a real terminal.

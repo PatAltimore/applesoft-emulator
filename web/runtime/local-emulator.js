@@ -1186,6 +1186,27 @@
       const session = this.getSession(sessionId);
       session.stopRequested = true;
     }
+
+    // Break immediately. If the program is running, the run loop sees the
+    // stop flag and prints BREAK on its own. If it is paused on INPUT/GET,
+    // the loop is not running, so finalize the break here and return the
+    // BREAK text for the caller to display.
+    abortRun(sessionId) {
+      const session = this.getSession(sessionId);
+      session.stopRequested = true;
+
+      if (session.awaitingInput) {
+        session.awaitingInput = null;
+        session.pendingInputApply = null;
+        session.execution = null;
+        session.forStack = [];
+        session.gosubStack = [];
+        this.writeln(session, "BREAK");
+        return this.flushOutput(session);
+      }
+
+      return "";
+    }
   }
 
   window.LocalApplesoftRuntime = LocalApplesoftRuntime;
