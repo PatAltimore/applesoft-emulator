@@ -176,12 +176,8 @@ async function executeCommand(command) {
   if (result?.awaitingInput) {
     awaitingInput = true;
     currentPromptIsKeyInput = !!result.isKeyInput;
-    if (currentPromptIsKeyInput) {
-      // GET: silently wait for a single keypress at the prompt, Apple II style.
-      clearRuntimeHint();
-    } else {
-      setRuntimeHint('Program is waiting for input. Type your answer and press Enter.', 'warning');
-    }
+    // INPUT and GET both wait silently at the prompt, Apple II style.
+    clearRuntimeHint();
     commandInput.focus();
   } else {
     awaitingInput = false;
@@ -260,6 +256,17 @@ document.addEventListener('keydown', event => {
   localRuntime.requestStop(sessionId);
   setRuntimeHint('BREAK requested...', 'warning');
 });
+
+// Clicking anywhere on the screen focuses the prompt, like a real terminal.
+// Skip when the user is selecting text so copying still works.
+const crtScreen = document.querySelector('.crt-screen');
+if (crtScreen) {
+  crtScreen.addEventListener('click', () => {
+    if (window.getSelection().toString() === '') {
+      commandInput.focus();
+    }
+  });
+}
 
 if (!localRuntime) {
   replaceOutput('?FATAL: BROWSER INTERPRETER FAILED TO LOAD.');
