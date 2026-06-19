@@ -62,8 +62,7 @@ body::before {
 }
 
 h1,
-h2,
-button {
+h2 {
   font-family: "Press Start 2P", cursive;
 }
 
@@ -150,71 +149,6 @@ h2 {
 
 .tiny {
   font-size: 0.8em;
-}
-
-.button-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.6rem;
-}
-
-.button-grid.mini {
-  margin-top: 0.25rem;
-}
-
-.button-grid.mini button {
-  padding: 0.55rem 0.5rem;
-  font-size: 0.55rem;
-}
-
-.list-pane {
-  list-style: none;
-  margin: 0.75rem 0 0;
-  padding: 0.45rem;
-  border: 2px solid #51632e;
-  background: rgba(8, 12, 4, 0.78);
-  max-height: 140px;
-  overflow: auto;
-  display: grid;
-  gap: 0.35rem;
-}
-
-.list-pane button {
-  width: 100%;
-  text-align: left;
-  font-family: "VT323", monospace;
-  font-size: 1.25rem;
-  padding: 0.4rem 0.55rem;
-  border: 1px solid #6d7f40;
-  background: rgba(0, 0, 0, 0.25);
-  color: var(--phosphor);
-}
-
-.list-pane button.active {
-  background: rgba(145, 255, 102, 0.2);
-  border-color: #ffe79b;
-  color: #fff6c9;
-}
-
-.list-pane .empty {
-  color: rgba(210, 242, 180, 0.7);
-  padding: 0.4rem 0.45rem;
-}
-
-button {
-  border: 2px solid #8c7d41;
-  background: linear-gradient(180deg, #5a4b1f 0%, #372e12 100%);
-  color: #fff2bd;
-  padding: 0.9rem 0.75rem;
-  font-size: 0.65rem;
-  cursor: pointer;
-  transition: transform 120ms ease, filter 120ms ease;
-}
-
-button:hover,
-button:focus-visible {
-  transform: translateY(-1px);
-  filter: brightness(1.08);
 }
 
 .crt {
@@ -370,10 +304,8 @@ button:focus-visible {
   z-index: 2;
 }
 
-textarea {
+#command-input {
   width: 100%;
-  min-height: auto;
-  resize: none;
   border: none;
   background: transparent;
   color: var(--phosphor);
@@ -388,11 +320,11 @@ textarea {
   caret-shape: block;
 }
 
-textarea::placeholder {
+#command-input::placeholder {
   color: rgba(145, 255, 102, 0.35);
 }
 
-textarea:focus {
+#command-input:focus {
   outline: none;
 }
 
@@ -414,10 +346,6 @@ textarea:focus {
 
   .masthead {
     flex-direction: column;
-  }
-
-  .button-grid {
-    grid-template-columns: 1fr 1fr;
   }
 
   .command-bar {

@@ -222,12 +222,16 @@ Separate statements with a colon:
 
 ## Architecture
 
-The emulator is composed of three main components:
+The emulator is a fully client-side static web app. There is no backend; the
+entire interpreter runs in the browser:
 
-- **Tokenizer** (`Tokenizer.cs`) — Lexes input into tokens (keywords, numbers, strings, operators)
-- **Expression Evaluator** (`ExpressionEvaluator.cs`) — Recursive-descent parser handling operator precedence, function calls, and variable access
-- **Interpreter** (`Interpreter.cs`) — Manages program storage, executes statements, and handles flow control (GOTO, GOSUB, FOR/NEXT, IF/THEN)
-- **Program** (`Program.cs`) — ASP.NET Core minimal API host with per-session interpreter state
+- **Frontend** (`web/index.html`, `web/app.js`, `web/styles.css`) — Apple ][ style CRT UI. Type a command at the bottom `]` prompt and press Enter to execute, just like a real Apple II.
+- **Interpreter** (`web/runtime/local-emulator.js`) — Tokenizer, recursive-descent expression evaluator, statement executor, and flow control (GOTO, GOSUB, FOR/NEXT, IF/THEN) — all in JavaScript.
+- **Persistence** (`web/runtime/local-emulator.js`) — IndexedDB-backed disk store for `SAVE`/`LOAD`/`CATALOG`, seeded from the bundled programs in `web/disk/`.
+
+Hosting is **Azure Static Web Apps (Free tier)**, deployed by the
+`.github/workflows/azure-static-web-app.yml` workflow. Infrastructure is defined
+in `infra/main.bicep`.
 
 ## Limitations
 
@@ -235,7 +239,7 @@ The emulator is composed of three main components:
 - No sound support
 - `PEEK`/`POKE` use simulated memory (no real hardware mapping)
 - `CALL` accepts but ignores machine-language addresses
-- No cassette or disk I/O beyond `SAVE`/`LOAD`/`CATALOG` to the `Disk/` folder
+- No cassette or disk I/O beyond `SAVE`/`LOAD`/`CATALOG` to browser IndexedDB
 
 ## License
 

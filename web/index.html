@@ -10,7 +10,6 @@
   <link rel="stylesheet" href="styles.css">
   <script src="config.js"></script>
   <script src="runtime/local-emulator.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -35,7 +34,7 @@
             <form id="command-form" class="command-bar">
               <div id="runtime-hint" class="runtime-hint" role="status" aria-live="polite"></div>
               <label class="prompt" for="command-input">]</label>
-              <textarea id="command-input" rows="2" spellcheck="false"></textarea>
+              <input id="command-input" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
             </form>
           </div>
         </div>
