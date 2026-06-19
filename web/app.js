@@ -1,19 +1,10 @@
-const config = window.APP_CONFIG ?? {};
-
 const outputEl = document.getElementById('output');
-const commandForm = document.getElementById('command-form');
 const commandInput = document.getElementById('command-input');
 const runtimeHintEl = document.getElementById('runtime-hint');
-const useBrowserRuntime = config.useBrowserRuntime !== false;
-const localRuntime = useBrowserRuntime && window.LocalApplesoftRuntime
+
+const localRuntime = window.LocalApplesoftRuntime
   ? new window.LocalApplesoftRuntime()
   : null;
-
-console.log('[APPLESOFT] Runtime Configuration:', {
-  useBrowserRuntime,
-  hasLocalApplesoftRuntime: !!window.LocalApplesoftRuntime,
-  localRuntimeCreated: !!localRuntime
-});
 
 let sessionId = null;
 let currentPromptIsKeyInput = false;
@@ -21,8 +12,6 @@ const historyStorageKey = 'applesoft-history';
 const commandHistory = JSON.parse(localStorage.getItem(historyStorageKey) ?? '[]');
 let historyCursor = commandHistory.length;
 
-let hubConnection = null;
-let hubReady = false;
 const outputStyleState = {
   inverse: false,
   flash: false
@@ -121,22 +110,8 @@ function setRuntimeHint(message, kind) {
   runtimeHintEl.className = `runtime-hint active ${kind}`;
 }
 
-function setSession(id) {
-  sessionId = id;
-
-  if (!useBrowserRuntime && hubReady && sessionId) {
-    hubConnection.invoke('AttachSession', sessionId).catch(error => {
-      appendOutput(`?HUB ATTACH ERROR: ${error.message}`);
-    });
-  }
-}
-
 function persistHistory() {
   localStorage.setItem(historyStorageKey, JSON.stringify(commandHistory.slice(-120)));
-}
-
-function renderHistory() {
-  // History panel removed from UI; users navigate history with arrow keys
 }
 
 function rememberCommand(command) {
@@ -153,144 +128,10 @@ function rememberCommand(command) {
   historyCursor = commandHistory.length;
 }
 
-async function apiRequest(path, options = {}) {
-  // Browser-only mode doesn't use the backend API
-  if (useBrowserRuntime) {
-    throw new Error('Backend API not available in browser-only mode');
-  }
-
-  const apiBaseUrl = (config.apiBaseUrl ?? window.location.origin).replace(/\/$/, '');
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers ?? {})
-    },
-    ...options
-  });
-
-  if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}`);
-  }
-
-  if (response.status === 204) {
-    return null;
-  }
-
-  return response.json();
-}
-
-async function initializeHub() {
-  if (useBrowserRuntime) {
-    hubReady = false;
-    return;
-  }
-
-  if (!window.signalR) {
-    appendOutput('?SIGNALR CLIENT NOT AVAILABLE. USING LEGACY MODE.');
-    return;
-  }
-
-  const apiBaseUrl = (config.apiBaseUrl ?? window.location.origin).replace(/\/$/, '');
-  hubConnection = new window.signalR.HubConnectionBuilder()
-    .withUrl(`${apiBaseUrl}/hubs/emulator`)
-    .withAutomaticReconnect()
-    .build();
-
-  hubConnection.on('ReceiveOutput', text => {
-    appendOutputChunk(text);
-  });
-
-  hubConnection.on('InputRequested', request => {
-    currentPromptIsKeyInput = !!request?.isKeyInput;
-    const hint = currentPromptIsKeyInput 
-      ? 'Program is waiting for a key. Enter a single character.' 
-      : 'Program is waiting for input. Type your answer and press Enter.';
-    const kind = currentPromptIsKeyInput ? 'key' : 'warning';
-    setRuntimeHint(hint, kind);
-    commandInput.focus();
-  });
-
-  hubConnection.on('ExecutionError', message => {
-    appendOutput(`?ERROR: ${message}`);
-    clearRuntimeHint();
-  });
-
-  hubConnection.on('ExecutionComplete', () => {
-    currentPromptIsKeyInput = false;
-    clearRuntimeHint();
-  });
-
-  hubConnection.onreconnecting(() => {
-    hubReady = false;
-    setRuntimeHint('Reconnecting live terminal...', 'warning');
-  });
-
-  hubConnection.onreconnected(async () => {
-    hubReady = true;
-    if (sessionId) {
-      await hubConnection.invoke('AttachSession', sessionId);
-    }
-    setRuntimeHint('Live terminal reconnected.', 'key');
-  });
-
-  try {
-    await hubConnection.start();
-    hubReady = true;
-    clearRuntimeHint();
-  } catch (error) {
-    hubReady = false;
-    appendOutput(`?HUB OFFLINE: ${error.message}`);
-  }
-}
-
-async function checkHealth() {
-  // Health check no longer needed in browser-only mode
-}
-
-async function createSession() {
-  if (useBrowserRuntime && localRuntime) {
-    setSession(localRuntime.createSession());
-    appendOutput(`NEW SESSION: ${sessionId}`);
-    appendOutput('READY. BROWSER INTERPRETER MODE ENABLED.');
-    await executeCommand('HELP');
-    return;
-  }
-
-  const data = await apiRequest('/api/session', { method: 'POST', body: '{}' });
-  setSession(data.sessionId);
-  appendOutput(`NEW SESSION: ${data.sessionId}`);
-  appendOutput(hubReady
-    ? 'READY. LIVE INTERACTIVE MODE ENABLED.'
-    : 'READY. TYPE BASIC OR USE THE DISK BUTTONS.');
-
-  await executeCommand('HELP');
-}
-
-async function resetSession() {
-  if (!sessionId) {
-    await createSession();
-    return;
-  }
-
-  if (useBrowserRuntime && localRuntime) {
-    await localRuntime.reset(sessionId);
-    appendOutput('SESSION RESET. MEMORY CLEARED.');
-    currentPromptIsKeyInput = false;
-    clearRuntimeHint();
-    await executeCommand('HELP');
-    return;
-  }
-
-  await apiRequest(`/api/session/${sessionId}/reset`, { method: 'POST', body: '{}' });
-  appendOutput('SESSION RESET. MEMORY CLEARED.');
-  currentPromptIsKeyInput = false;
-  clearRuntimeHint();
-
-  if (hubReady) {
-    await hubConnection.invoke('AttachSession', sessionId);
-  }
-
-  await executeCommand('HELP');
+function createSession() {
+  sessionId = localRuntime.createSession();
+  appendOutput('READY.');
+  executeCommand('HELP');
 }
 
 async function executeCommand(command) {
@@ -302,100 +143,54 @@ async function executeCommand(command) {
   }
 
   if (!sessionId) {
-    await createSession();
+    createSession();
   }
 
-  if (useBrowserRuntime && localRuntime) {
-    if (!command.trim() && !runtimeHintEl.classList.contains('active')) {
-      return;
-    }
+  const awaitingInput = runtimeHintEl.classList.contains('active');
 
-    if (!runtimeHintEl.classList.contains('active') && command.trim()) {
-      appendOutput(`]${command}`);
-      rememberCommand(command);
-    }
-
-    localRuntime.setOutputListener(sessionId, chunk => {
-      appendOutputChunk(chunk);
-    });
-
-    let result;
-    try {
-      result = await localRuntime.execute(sessionId, command);
-    } finally {
-      localRuntime.setOutputListener(sessionId, null);
-    }
-
-    if (result?.output) {
-      appendOutputChunk(result.output);
-    }
-
-    if (result?.awaitingInput) {
-      currentPromptIsKeyInput = !!result.isKeyInput;
-      if (currentPromptIsKeyInput) {
-        setRuntimeHint('Program is waiting for a key. Enter a single character and press Enter.', 'key');
-      } else {
-        setRuntimeHint('Program is waiting for input. Type your answer and press Enter.', 'warning');
-      }
-      commandInput.focus();
-    } else {
-      currentPromptIsKeyInput = false;
-      clearRuntimeHint();
-    }
+  // Nothing to do for an empty line unless a program is waiting for input.
+  if (!command.trim() && !awaitingInput) {
     return;
   }
 
-  // If a program is waiting for input, submit the input to the runtime.
-  // This allows GET prompts like "PRESS ANY KEY" to accept Enter/blank input.
-  if (runtimeHintEl.classList.contains('active')) {
-    const inputToSend = currentPromptIsKeyInput
-      ? (command.length === 0 ? '\n' : command[0])
-      : command;
-
-    if (useBrowserRuntime && localRuntime) {
-      try {
-        const result = await localRuntime.execute(sessionId, inputToSend);
-        if (result?.output) {
-          appendOutputChunk(result.output);
-        }
-        if (result?.awaitingInput) {
-          currentPromptIsKeyInput = !!result.isKeyInput;
-          if (currentPromptIsKeyInput) {
-            setRuntimeHint('Program is waiting for a key. Enter a single character and press Enter.', 'key');
-          } else {
-            setRuntimeHint('Program is waiting for input. Type your answer and press Enter.', 'warning');
-          }
-          commandInput.focus();
-        } else {
-          currentPromptIsKeyInput = false;
-          clearRuntimeHint();
-        }
-      } catch (error) {
-        console.error('[APPLESOFT] Error submitting input:', error);
-        appendOutput('?ERROR');
-        clearRuntimeHint();
-      }
-    } else if (hubReady) {
-      await hubConnection.invoke('SubmitInput', sessionId, inputToSend);
-    }
-    return;
+  // Echo the typed command at the prompt (but not the answers to INPUT/GET).
+  if (!awaitingInput) {
+    appendOutput(`]${command}`);
+    rememberCommand(command);
   }
 
-  if (!command.trim()) {
-    return;
+  localRuntime.setOutputListener(sessionId, chunk => {
+    appendOutputChunk(chunk);
+  });
+
+  let result;
+  try {
+    result = await localRuntime.execute(sessionId, command);
+  } finally {
+    localRuntime.setOutputListener(sessionId, null);
   }
 
-  appendOutput(`]${command}`);
-  rememberCommand(command);
+  if (result?.output) {
+    appendOutputChunk(result.output);
+  }
 
-  if (hubReady) {
-    await hubConnection.invoke('StartExecution', sessionId, command);
-    return;
+  if (result?.awaitingInput) {
+    currentPromptIsKeyInput = !!result.isKeyInput;
+    setRuntimeHint(
+      currentPromptIsKeyInput
+        ? 'Program is waiting for a key. Enter a single character and press Enter.'
+        : 'Program is waiting for input. Type your answer and press Enter.',
+      currentPromptIsKeyInput ? 'key' : 'warning'
+    );
+    commandInput.focus();
+  } else {
+    currentPromptIsKeyInput = false;
+    clearRuntimeHint();
   }
 }
 
 commandInput.addEventListener('keydown', async event => {
-  if (event.key === 'Enter' && !event.shiftKey) {
+  if (event.key === 'Enter') {
     event.preventDefault();
     const command = commandInput.value;
     commandInput.value = '';
@@ -405,6 +200,7 @@ commandInput.addEventListener('keydown', async event => {
     } catch (error) {
       appendOutput(`?ERROR: ${error.message}`);
     }
+    return;
   }
 
   if (event.key === 'ArrowUp') {
@@ -428,7 +224,7 @@ commandInput.addEventListener('keydown', async event => {
 });
 
 document.addEventListener('keydown', event => {
-  if (!(useBrowserRuntime && localRuntime && sessionId)) {
+  if (!sessionId) {
     return;
   }
 
@@ -442,19 +238,10 @@ document.addEventListener('keydown', event => {
   setRuntimeHint('BREAK requested...', 'warning');
 });
 
-replaceOutput('APPLE ][ ONLINE\nBOOTING BROWSER BASIC SUBSYSTEM...\n');
-commandInput.focus();
-
-if (useBrowserRuntime) {
-  checkHealth()
-    .then(createSession)
-    .catch(error => {
-      appendOutput(`?ERROR: ${error.message}`);
-    });
+if (!localRuntime) {
+  replaceOutput('?FATAL: BROWSER INTERPRETER FAILED TO LOAD.');
 } else {
-  Promise.all([checkHealth(), initializeHub()])
-    .then(createSession)
-    .catch(error => {
-      appendOutput(`?ERROR: ${error.message}`);
-    });
+  replaceOutput('APPLE ][ ONLINE\nBOOTING BROWSER BASIC SUBSYSTEM...\n');
+  commandInput.focus();
+  createSession();
 }
