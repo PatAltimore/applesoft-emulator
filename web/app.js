@@ -254,7 +254,7 @@ document.addEventListener('keydown', event => {
 
   event.preventDefault();
   localRuntime.requestStop(sessionId);
-  setRuntimeHint('BREAK requested...', 'warning');
+  clearRuntimeHint();
 });
 
 // Clicking anywhere on the screen focuses the prompt, like a real terminal.
