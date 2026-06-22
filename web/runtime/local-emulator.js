@@ -317,7 +317,12 @@
         const upper = token.toUpperCase();
 
         if (/^"/.test(token)) {
-          transformed.push(token.replace(/""/g, '\\"'));
+          // Applesoft string literal. The outer quotes are delimiters; an
+          // inner "" is an escaped quote. Decode to the raw string (so the
+          // empty literal "" becomes "" and not an escaped quote), then emit
+          // a safely-escaped JS string literal.
+          const inner = token.slice(1, -1).replace(/""/g, '"');
+          transformed.push(JSON.stringify(inner));
           continue;
         }
 

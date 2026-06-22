@@ -64,15 +64,32 @@ function applyAnsiCodes(codesText) {
   }
 }
 
+function clearScreen() {
+  outputEl.textContent = '';
+  outputStyleState.inverse = false;
+  outputStyleState.flash = false;
+}
+
 function appendStyledText(text) {
-  const ansiRegex = /\x1b\[([0-9;]+)m/g;
+  // Match any CSI escape sequence: ESC [ <params> <final-letter>.
+  const ansiRegex = /\x1b\[([0-9;]*)([A-Za-z])/g;
   let lastIndex = 0;
   let match;
 
   while ((match = ansiRegex.exec(text)) !== null) {
-    const plain = text.slice(lastIndex, match.index);
-    appendStyledRun(plain);
-    applyAnsiCodes(match[1]);
+    appendStyledRun(text.slice(lastIndex, match.index));
+
+    const params = match[1];
+    const command = match[2];
+    if (command === 'm') {
+      applyAnsiCodes(params);
+    } else if (command === 'J' && (params === '2' || params === '')) {
+      // Clear screen (Applesoft HOME).
+      clearScreen();
+    }
+    // Cursor-home ('H') and any other sequence are consumed (no-op) rather
+    // than leaking to the screen as text.
+
     lastIndex = ansiRegex.lastIndex;
   }
 
