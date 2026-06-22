@@ -950,6 +950,16 @@
         const limit = Number(this.evaluateExpression(session, m[3]));
         const step = m[4] ? Number(this.evaluateExpression(session, m[4])) : 1;
 
+        // Applesoft semantics: re-entering FOR with the same control variable
+        // cancels the previous loop for that variable (and any loops nested
+        // inside it). Without this, jumping back onto a FOR line (e.g. a GOTO
+        // loop) or exiting a FOR via GOTO would leak frames, and a later
+        // NEXT could bind to a stale frame and misroute execution.
+        const existing = session.forStack.findIndex(frame => frame.varName === varName);
+        if (existing >= 0) {
+          session.forStack.length = existing;
+        }
+
         session.vars[varName] = Number.isNaN(start) ? 0 : start;
         session.forStack.push({
           varName,
