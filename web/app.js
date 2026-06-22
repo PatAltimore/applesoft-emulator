@@ -10,8 +10,19 @@ let sessionId = null;
 let awaitingInput = false;
 let currentPromptIsKeyInput = false;
 const historyStorageKey = 'applesoft-history';
-const commandHistory = JSON.parse(localStorage.getItem(historyStorageKey) ?? '[]');
+const commandHistory = loadCommandHistory();
 let historyCursor = commandHistory.length;
+
+// Tolerate missing/corrupted history so a bad localStorage value can't break
+// startup. Only keep an array of strings.
+function loadCommandHistory() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(historyStorageKey) ?? '[]');
+    return Array.isArray(parsed) ? parsed.filter(item => typeof item === 'string') : [];
+  } catch {
+    return [];
+  }
+}
 
 const outputStyleState = {
   inverse: false,
