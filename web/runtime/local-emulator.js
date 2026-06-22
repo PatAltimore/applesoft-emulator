@@ -566,6 +566,31 @@
       return items;
     }
 
+    // Split on top-level commas only, ignoring commas inside parentheses,
+    // so e.g. "C(20,3), A(10)" splits into ["C(20,3)", " A(10)"].
+    splitTopLevel(text) {
+      const parts = [];
+      let depth = 0;
+      let current = "";
+      for (const ch of text) {
+        if (ch === '(') {
+          depth += 1;
+        } else if (ch === ')') {
+          depth -= 1;
+        }
+        if (ch === ',' && depth === 0) {
+          parts.push(current);
+          current = "";
+        } else {
+          current += ch;
+        }
+      }
+      if (current.trim().length > 0) {
+        parts.push(current);
+      }
+      return parts;
+    }
+
     ensureExecution(session) {
       if (!session.execution) {
         const lines = [...session.program.keys()].sort((a, b) => a - b);
@@ -745,16 +770,18 @@
         // In JavaScript, we don't need to pre-allocate arrays, they grow dynamically
         // Just parse and validate the syntax, then continue
         const dimPart = stmt.replace(/^DIM\s+/i, "").trim();
-        const arraySpecs = dimPart.split(/\s*,\s*/);
+        const arraySpecs = this.splitTopLevel(dimPart);
         for (const spec of arraySpecs) {
-          const m = spec.match(/^([A-Z][A-Z0-9$]*)\s*\(\s*(\d+)\s*(?:,\s*(\d+))?\s*\)$/i);
+          const m = spec.trim().match(/^([A-Z][A-Z0-9$]*)\s*\(\s*(\d+)\s*(?:,\s*(\d+))?\s*\)$/i);
           if (!m) {
             this.writeln(session, "?SYNTAX ERROR");
             return { type: "next" };
           }
-          // Validate the array name exists in session.vars (auto-initialize as empty array if needed)
+          // Initialize the array as an object keyed by index string. Reset any
+          // non-array value (e.g. a leftover scalar of the same name) so the
+          // element assignments below don't fail on a primitive.
           const arrayName = m[1].toUpperCase();
-          if (!session.vars[arrayName]) {
+          if (!session.vars[arrayName] || typeof session.vars[arrayName] !== "object") {
             session.vars[arrayName] = {};
           }
         }
@@ -976,11 +1003,13 @@
           const indices = arrayMatch[2].split(/\s*,\s*/).map(idx => Number(this.evaluateExpression(session, idx)));
           const value = this.evaluateExpression(session, arrayMatch[3]);
           
-          // Initialize array if needed
-          if (!session.vars[arrayName]) {
+          // Initialize array if needed. Reset any non-array value (e.g. a
+          // leftover scalar of the same name) so we don't try to set a
+          // property on a number.
+          if (!session.vars[arrayName] || typeof session.vars[arrayName] !== "object") {
             session.vars[arrayName] = {};
           }
-          
+
           // Use index string as key: "1,1" for C(1,1)
           const key = indices.join(",");
           session.vars[arrayName][key] = value;
